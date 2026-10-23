@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f4ef">
+  <title>Your Prep Room</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='quiz.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='engine.css') }}">
+  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+</head>
+<body data-demo-mode="{{ 'true' if demo_mode else 'false' }}">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Your Prep Room home"><span class="brand-mark">P</span><span>your prep room<span class="brand-period">.</span></span></a>
+    <div class="topbar-right"><span class="privacy-note"><span class="status-dot"></span>Private practice space</span><span class="mode-pill" id="mode-pill">{{ 'DEMO MODE' if demo_mode else 'AI COACH' }}</span></div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-intro"><span class="eyebrow">YOUR PREP ROOM</span><h1>Practice with<br>purpose.</h1><p>A focused space to find your words before the room matters.</p></div>
+      <nav class="stage-nav" aria-label="Interview practice stages">
+        <button class="stage-link active" data-stage="setup" type="button"><span class="stage-number">01</span><span>Set up</span><span class="stage-state">NOW</span></button>
+        <button class="stage-link" data-stage="practice" type="button" disabled><span class="stage-number">02</span><span>Practice</span></button>
+        <button class="stage-link" data-stage="review" type="button" disabled><span class="stage-number">03</span><span>Review</span></button>
+        <button class="stage-link" data-stage="reset" type="button" disabled><span class="stage-number">04</span><span>Reset & repeat</span><span class="optional-label">OPTIONAL</span></button>
+      </nav>
+      <div class="sidebar-foot"><span class="foot-rule"></span><p>Good interviews aren't memorized.<br>They're understood.</p><span class="foot-index">PANEL BRIEF 01</span></div>
+    </aside>
+
+    <section class="workspace" aria-live="polite">
+      <div class="workspace-head"><div><span class="eyebrow" id="stage-kicker">STEP 01 / SET UP</span><h2 id="page-title">Build your practice</h2></div><div class="workspace-tools"><span class="session-count" id="session-count">NO SESSION YET</span><button class="button button-light stage-back" id="stage-back" type="button" hidden>← Back</button></div></div>
+
+      <section class="stage-panel visible" id="panel-setup">
+        <p class="section-lede">Start with the role you want. We'll shape the questions around what matters.</p>
+        <form id="setup-form">
+          <label class="field-label" for="role">ROLE OR JOB TITLE</label>
+          <select class="select-input" id="role" name="role" required><option value="" disabled selected>Select a role</option><option>Software engineer</option><option>Application engineer</option><option>Quality engineer</option><option>Architect</option><option>DevOps engineer</option><option>Other</option></select>
+          <input class="text-input other-role" id="other-role" name="other_role" placeholder="Enter your job title" maxlength="100" hidden>
+          <div class="field-grid">
+            <div><label class="field-label" for="experience">EXPERIENCE LEVEL</label><select class="select-input" id="experience" name="experience" required><option value="" disabled selected>Select level</option><option>Entry level</option><option>Early career (1-3 years)</option><option>Mid-level (4-7 years)</option><option>Senior (8+ years)</option><option>Career change</option></select></div>
+            <div><label class="field-label" for="interview-type">INTERVIEW TYPE</label><select class="select-input" id="interview-type" name="interview_type" required><option value="" disabled selected>Select format</option><option>Behavioral</option><option>Technical</option><option>Situational</option><option>Hiring manager</option><option>Mixed practice</option></select></div>
+          </div>
+          <fieldset class="focus-fieldset"><legend class="field-label">FOCUS AREAS <span class="field-hint">Choose at least one</span></legend><div class="focus-options">
+            <label class="focus-option"><input type="checkbox" name="focus" value="Communication"><span>Communication</span></label>
+            <label class="focus-option"><input type="checkbox" name="focus" value="Problem solving"><span>Problem solving</span></label>
+            <label class="focus-option"><input type="checkbox" name="focus" value="Leadership"><span>Leadership</span></label>
+            <label class="focus-option"><input type="checkbox" name="focus" value="Technical depth"><span>Technical depth</span></label>
+            <label class="focus-option"><input type="checkbox" name="focus" value="Impact & results"><span>Impact & results</span></label>
+            <label class="focus-option"><input type="checkbox" name="focus" value="Collaboration"><span>Collaboration</span></label>
+          </div></fieldset>
+          <div class="form-bottom"><span class="form-note">Your answers are saved to a local Excel workbook.</span><button class="button button-dark" type="submit"><span>Build my session</span><span aria-hidden="true">→</span></button></div>
+        </form>
+      </section>
+
+      <section class="stage-panel" id="panel-practice" hidden>
+        <div class="question-meta"><span class="tag" id="question-focus">FOCUS AREA</span><span class="question-index" id="question-index">QUESTION 01 / 05</span></div>
+        <div class="question-block"><span class="quote-mark">“</span><h3 id="question-text">Your question will appear here.</h3></div>
+        <div class="question-type-line"><span class="question-type" id="question-type">SCENARIO</span><span class="question-difficulty" id="question-difficulty">INTERMEDIATE</span></div>
+        <fieldset class="answer-fieldset" id="choice-fieldset"><legend class="field-label">CHOOSE ONE ANSWER</legend><div class="answer-options" id="answer-options" role="radiogroup" aria-label="Answer options"></div></fieldset>
+        <div class="open-answer-field" id="open-answer-field" hidden><label class="field-label" for="open-answer">TALK THROUGH YOUR APPROACH</label><textarea id="open-answer" class="answer-input" rows="6" placeholder="Explain how you would investigate, decide, and verify the outcome."></textarea></div>
+        <div class="form-bottom practice-bottom"><span class="form-note" id="answer-hint">One answer per question</span><button class="button button-dark" id="review-answer" type="button"><span>Check answer</span><span aria-hidden="true">→</span></button></div>
+        <p class="inline-error" id="practice-error" role="alert"></p>
+      </section>
+
+      <section class="stage-panel" id="panel-review" hidden>
+        <div class="answer-verdict" id="answer-verdict"><span class="verdict-mark" id="verdict-mark">✓</span><div><span class="eyebrow" id="verdict-label">ANSWER CHECK</span><h3 id="verdict-title">Correct</h3></div><span class="answer-score" id="answer-score"></span></div>
+        <p class="review-summary" id="review-feedback"></p>
+        <div class="answer-explanation"><span class="field-label">WHY THIS ANSWER</span><p id="answer-explanation-text"></p><p class="answer-comparison" id="answer-comparison"></p></div>
+        <section class="round-review" id="round-review" hidden>
+          <div class="round-score-line"><div><span class="eyebrow">ROUND RESULTS</span><h3>Your score</h3></div><div class="round-score" id="round-score">0 / 5</div></div>
+          <p class="round-feedback" id="round-feedback"></p>
+          <div class="focus-summary"><span class="field-label">FOCUS AREA RESULTS</span><ul id="focus-summary-list"></ul></div>
+          <div class="next-steps"><span class="field-label">AREAS TO IMPROVE</span><ul id="improvement-list"></ul></div>
+          <div class="next-steps"><span class="field-label">YOUR NEXT MOVES</span><ol id="next-steps-list"></ol></div>
+          <div class="question-recap"><span class="field-label">ANSWER-BY-ANSWER</span><div id="round-results"></div></div>
+        </section>
+        <div class="form-bottom"><span class="form-note" id="review-progress">Your choice is recorded in this round.</span><button class="button button-dark" id="continue-practice" type="button"><span>Next question</span><span aria-hidden="true">→</span></button></div>
+        <p class="inline-error" id="review-error" role="alert"></p>
+      </section>
+
+      <section class="stage-panel" id="panel-reset" hidden>
+        <span class="eyebrow">ROUND COMPLETE</span><h3 class="reset-title">Ready to strengthen your weak spots?</h3><p class="reset-copy" id="reset-copy">Practice missed focus areas in a fresh question round.</p>
+        <div class="stat-strip"><div><span class="stat-number" id="stat-score">0 / 5</span><span class="stat-label">CORRECT</span></div><div><span class="stat-number" id="stat-round">01</span><span class="stat-label">ROUND</span></div><div><span class="stat-number" id="stat-improvements">0</span><span class="stat-label">AREAS TO REVIEW</span></div></div>
+        <div class="reset-focus"><span class="field-label">NEXT ROUND FOCUS</span><div id="retry-focus-list"></div></div>
+        <div class="reset-actions"><button class="button button-dark" id="reset-practice" type="button"><span>Practice again</span><span aria-hidden="true">↻</span></button><button class="button button-light" id="edit-setup" type="button">Start over</button></div>
+      </section>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+</body>
+</html>
