@@ -46,7 +46,27 @@ body {
 }
 
 .topbar-right {
+  display: flex;
+  align-items: center;
   gap: 14px;
+}
+
+.topbar-right form {
+  margin: 0;
+}
+
+.user-greeting {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.user-greeting strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.signout-button {
+  padding: 5px 7px;
 }
 
 .privacy-note {
@@ -1034,6 +1054,10 @@ body {
     display: none;
   }
 
+  .user-greeting {
+    display: none;
+  }
+
   .layout {
     display: block;
     min-height: calc(100vh - 58px);
@@ -1194,5 +1218,137 @@ body {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
+  }
+}
+
+.question-meta {
+  gap: 12px;
+}
+
+.question-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font: 500 9px var(--mono);
+}
+
+.question-timer strong {
+  color: var(--text);
+  font: 700 14px var(--mono);
+}
+
+.question-timer.is-urgent {
+  border-color: #7f3838;
+  background: #301b1b;
+}
+
+.question-timer.is-urgent strong {
+  color: #fca5a5;
+}
+
+.topic-status-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.topic-question-preview {
+  margin: 0;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--border);
+  color: #d4d4d8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.topic-back {
+  margin-bottom: 20px;
+}
+
+.topic-reference {
+  margin: 0 0 18px;
+}
+
+.score-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.grade-badge {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid #31583f;
+  border-radius: 10px;
+  background: #18291e;
+  color: #86efac;
+  font: 800 23px var(--display);
+}
+
+.candidate-result,
+.performance-feedback {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.performance-feedback {
+  padding: 12px 14px;
+  border-left: 2px solid var(--blue);
+  background: #171f2a;
+  color: #dbeafe;
+}
+
+.roadmap-topics article {
+  align-items: center;
+}
+
+.roadmap-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 14px;
+}
+
+.roadmap-actions > button {
+  margin: 0 !important;
+}
+
+@media (max-width: 620px) {
+  .question-meta {
+    flex-wrap: wrap;
+  }
+
+  .question-timer {
+    margin-left: auto;
+  }
+
+  .topic-status-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .roadmap-topics article {
+    align-items: flex-start;
+  }
+
+  .roadmap-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .round-score-line {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .score-badge {
+    flex-direction: column;
+    align-items: flex-end;
   }
 }

@@ -12,9 +12,14 @@ const state = {
   retryMode: false,
   previousQuestion: null,
   stage: "setup",
+  questionStartedAt: 0,
+  timeLimitSeconds: 0,
+  timeExpired: false,
+  submittingAnswer: false,
 };
 const stages = ["setup", "practice", "review", "reset"];
 const $ = (selector) => document.querySelector(selector);
+let questionTimer = null;
 
 function showStage(stage) {
   state.stage = stage;
@@ -30,6 +35,43 @@ function showStage(stage) {
       || (name === "reset" && !state.roundComplete);
     link.querySelector(".stage-state")?.remove();
     if (name === stage) link.insertAdjacentHTML("beforeend", '<span class="stage-state">NOW</span>');
+  }
+
+  function stopQuestionTimer() {
+    if (questionTimer !== null) {
+      clearInterval(questionTimer);
+      questionTimer = null;
+    }
+  }
+
+  function renderTimer(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    $("#timer-display").textContent = `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+    $(".question-timer").classList.toggle("is-urgent", seconds <= 60);
+  }
+
+  function startQuestionTimer(question, preserveStart = false) {
+    stopQuestionTimer();
+    state.timeLimitSeconds = Number(question.time_limit_seconds) || 0;
+    state.timeExpired = false;
+    if (!preserveStart || !state.questionStartedAt) state.questionStartedAt = Date.now();
+    if (!state.timeLimitSeconds) {
+      renderTimer(0);
+      return;
+    }
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - state.questionStartedAt) / 1000);
+      const remaining = Math.max(0, state.timeLimitSeconds - elapsed);
+      renderTimer(remaining);
+      if (remaining === 0) {
+        state.timeExpired = true;
+        stopQuestionTimer();
+        submitAnswer(true);
+      }
+    };
+    tick();
+    if (!state.timeExpired) questionTimer = setInterval(tick, 250);
   }
   const headings = {
     setup: ["STEP 01 / SET UP", "Build your practice"],
@@ -49,7 +91,7 @@ const pageHeadings = {
   mock: ["TEXT-BASED PRACTICE", "Mock Interviews"],
   progress: ["SAVED WORKBOOK DATA", "Progress Tracker"],
   experiences: ["CANDIDATE STORIES", "Interview Experiences"],
-  resources: ["PRACTICAL GUIDANCE", "Community & Resources"],
+  "topic-status": ["QUESTION BANK STATUS", "Topic status"],
 };
 
 function setView(view) {
@@ -80,8 +122,20 @@ async function requestJson(url, options = {}) {
     ...options,
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
-  const data = await response.json();
+  const responseText = await response.text();
+  let data;
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    const detail = responseText.trim().startsWith("<!doctype") || responseText.trim().startsWith("<html")
+      ? "The server returned an HTML page instead of API data. Check that the app is running and sign in again."
+      : "The server returned an unreadable response.";
+    throw new Error(`${detail} (HTTP ${response.status})`);
+  }
   if (!response.ok) throw new Error(data.error || "Something went wrong. Please try again.");
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new Error("The server response was not JSON. Please reload the page and try again.");
+  }
   return data;
 }
 
@@ -113,9 +167,10 @@ async function loadDashboard() {
       const role = document.createElement("strong");
       role.textContent = session.role;
       const detail = document.createElement("span");
-      detail.textContent = session.accuracy === null
-        ? `${session.attempted_count} of ${session.requested_question_count} answered · In progress`
-        : `${session.attempted_count} of ${session.requested_question_count} answered · ${session.accuracy}% accuracy`;
+      const date = formatDate(session.created_at);
+      detail.textContent = session.completed
+        ? `Attempt ${session.attempt_number} · ${date} · ${session.accuracy}% · Grade ${session.grade}`
+        : `${session.attempted_count} of ${session.requested_question_count} answered · In progress · ${date}`;
       item.append(role, detail);
       list.append(item);
     }
@@ -176,12 +231,17 @@ function renderRecentActivity(sessions) {
     const role = document.createElement("strong");
     role.textContent = session.role;
     const detail = document.createElement("span");
-    detail.textContent = session.accuracy === null
-      ? `${session.attempted_count}/${session.requested_question_count} answered · In progress`
-      : `${session.attempted_count}/${session.requested_question_count} answered · ${session.accuracy}% accuracy`;
+    detail.textContent = session.completed
+      ? `Attempt ${session.attempt_number} · ${formatDate(session.created_at)} · ${session.accuracy}% · Grade ${session.grade}`
+      : `${session.attempted_count}/${session.requested_question_count} answered · In progress · ${formatDate(session.created_at)}`;
     row.append(role, detail);
     container.append(row);
   }
+}
+
+function formatDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Date unavailable" : date.toLocaleDateString();
 }
 
 async function loadTopicAvailability() {
@@ -198,15 +258,59 @@ async function loadTopicAvailability() {
         : count > 0 ? `${count} matching questions available` : "No matching questions yet";
       label.classList.toggle("is-muted", count === undefined || count === 0);
     }
-    for (const card of document.querySelectorAll(".topic-card[data-topic-focus]")) {
-      const count = counts.get(card.dataset.topicFocus);
-      if (count !== undefined && count === 0) {
-        const action = card.querySelector("[data-topic-practice]");
-        if (action) {
-          action.removeAttribute("data-topic-practice");
-          action.setAttribute("data-topic-unavailable", "");
-          action.textContent = "View topic status →";
-        }
+    const hubTopics = new Set([...destination.querySelectorAll(".topic-card")].map((card) => card.dataset.topicName));
+    for (const topic of data.topics) {
+      if (hubTopics.has(topic.topic) || topic.topic === "Data Structures and Algorithms" || topic.available_question_count === 0) continue;
+      const card = document.createElement("article");
+      card.className = "topic-card";
+      card.dataset.topicName = topic.topic;
+      card.dataset.topicFocus = topic.focus_area;
+      const icon = document.createElement("span");
+      icon.className = "topic-icon";
+      icon.textContent = "◈";
+      const title = document.createElement("h4");
+      title.textContent = topic.topic;
+      const description = document.createElement("p");
+      description.textContent = `${topic.topic} questions from the curated practice bank.`;
+      const count = document.createElement("span");
+      count.className = "topic-count";
+      count.textContent = `${topic.available_question_count} matching questions available`;
+      const practice = document.createElement("button");
+      practice.type = "button";
+      practice.className = "topic-action";
+      practice.dataset.topicPractice = "";
+      practice.textContent = "Practise topic →";
+      const status = document.createElement("button");
+      status.type = "button";
+      status.className = "topic-action";
+      status.dataset.topicStatus = "";
+      status.textContent = "View topic status →";
+      card.append(icon, title, description, count, practice, status);
+      destination.append(card);
+    }
+    for (const card of document.querySelectorAll(".topic-card")) {
+      if (!card.querySelector("[data-topic-status]")) {
+        const status = document.createElement("button");
+        status.type = "button";
+        status.className = "topic-action";
+        status.dataset.topicStatus = "";
+        status.textContent = "View topic status →";
+        card.append(status);
+      }
+    }
+    for (const topic of data.topics) {
+      if (topic.topic !== "Data Structures and Algorithms") ensureFocusInput(topic.focus_area);
+    }
+    const dsaCard = destination.querySelector('[data-topic-status-name="Data Structures and Algorithms"]');
+    if (dsaCard) {
+      const dsa = data.topics.find((topic) => topic.topic === "Data Structures and Algorithms");
+      const label = dsaCard.querySelector(".topic-count");
+      if (dsa && label) {
+        label.textContent = dsa.available_question_count
+          ? `${dsa.available_question_count} matching questions available`
+          : "No matching questions yet";
+        label.classList.toggle("is-muted", !dsa.available_question_count);
+        dsaCard.dataset.topicStatusName = dsa.topic;
       }
     }
   } catch (error) {
@@ -218,27 +322,135 @@ async function loadTopicAvailability() {
   }
 }
 
-const roadmapStorageKey = "interviewready-roadmap-completed";
+function ensureFocusInput(focusArea) {
+  const options = $(".focus-options");
+  if ([...options.querySelectorAll('input[name="focus"]')].some((input) => input.value === focusArea)) return;
+  const label = document.createElement("label");
+  label.className = "focus-option";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.name = "focus";
+  input.value = focusArea;
+  input.addEventListener("change", refreshQuestionCapacity);
+  const text = document.createElement("span");
+  text.textContent = focusArea;
+  label.append(input, text);
+  options.append(label);
+}
 
-function readStoredList(key) {
+async function openTopicStatus(topicName) {
+  try {
+    const topic = await requestJson(`/api/topics/${encodeURIComponent(topicName)}`);
+    $("#topic-status-title").textContent = topic.topic;
+    $("#topic-status-description").textContent = topic.available_question_count
+      ? `${topic.available_question_count} matching multiple-choice questions are available in the current curated bank.`
+      : "No matching questions are available yet. You can return to the Prep Hub to explore another topic.";
+    $("#topic-status-count").textContent = topic.available_question_count;
+    for (const difficulty of ["easy", "medium", "hard"]) {
+      $(`#topic-status-${difficulty}`).textContent = topic.difficulty_counts[difficulty[0].toUpperCase() + difficulty.slice(1)] || 0;
+    }
+    const questions = $("#topic-status-questions");
+    questions.replaceChildren();
+    for (const item of topic.question_titles) {
+      const row = document.createElement("p");
+      row.className = "topic-question-preview";
+      row.textContent = item.subtopic ? `${item.subtopic}: ${item.question}` : item.question;
+      questions.append(row);
+    }
+    if (!topic.question_titles.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.textContent = "There are no question previews for this topic yet.";
+      questions.append(empty);
+    }
+    const reference = $("#topic-reference");
+    reference.hidden = !topic.reference_url;
+    if (topic.reference_url) reference.href = topic.reference_url;
+    const practice = $("#topic-status-practice");
+    practice.dataset.topicFocusAreas = JSON.stringify(topic.practice_focus_areas || []);
+    practice.disabled = !topic.available_question_count || !topic.practice_focus_areas?.length;
+    setView("topic-status");
+  } catch (error) {
+    showToast(`Topic status could not be loaded: ${error.message}`);
+  }
+}
+
+const checklistProgress = {
+  roadmapCompleted: new Set(),
+  plannerCompleted: new Set(),
+  plannerDate: "",
+};
+const userScope = document.body.dataset.userScope || "local";
+const csrfToken = document.body.dataset.csrfToken || "";
+const roadmapTopicGroups = {
+  "arrays-strings": ["Arrays", "Strings"],
+  "search-sort": ["Sorting", "Binary Search"],
+  "hashing-lists": ["Hashing", "Linked Lists"],
+  "stacks-recursion": ["Stacks and Queues", "Recursion and Backtracking"],
+  "trees-heaps-graphs": ["Trees and Binary Search Trees", "Heaps", "Graphs"],
+  "greedy-dp": ["Greedy Algorithms", "Dynamic Programming"],
+  oop: ["Object-Oriented Programming"],
+  databases: ["Database Management Systems"],
+  "operating-systems": ["Operating Systems"],
+  networks: ["Computer Networks"],
+};
+
+function localPlannerDate() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
+
+function readLegacyChecklist(key) {
   try {
     const stored = localStorage.getItem(key);
     if (!stored) return [];
     const parsed = JSON.parse(stored);
     if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
-      throw new TypeError("Saved browser data has an unexpected format.");
+      throw new TypeError("Saved checklist data has an unexpected format.");
     }
     return parsed;
   } catch (error) {
-    showToast(`Browser-saved checklist data could not be read: ${error.message}`);
-    return [];
+    showToast(`Previous browser checklist data could not be migrated: ${error.message}`);
+    return null;
+  }
+}
+
+function setChecklistControlsDisabled(disabled) {
+  for (const control of document.querySelectorAll("[data-roadmap-complete], [data-planner-task], #reset-planner")) {
+    control.disabled = disabled;
   }
 }
 
 function renderRoadmapProgress() {
-  const completed = new Set(readStoredList(roadmapStorageKey));
+  const completed = checklistProgress.roadmapCompleted;
   const rows = document.querySelectorAll("[data-roadmap-id]");
   for (const row of rows) {
+    const topicNames = roadmapTopicGroups[row.dataset.roadmapId] || [];
+    const content = row.querySelector("h4")?.parentElement;
+    if (content) {
+      for (const stale of content.querySelectorAll("button")) stale.remove();
+      const actions = document.createElement("div");
+      actions.className = "roadmap-actions";
+      for (const topicName of topicNames) {
+        const practice = document.createElement("button");
+        practice.type = "button";
+        practice.dataset.roadmapPractice = topicName;
+        practice.textContent = `Practise ${topicName}`;
+        actions.append(practice);
+        const status = document.createElement("button");
+        status.type = "button";
+        status.dataset.roadmapStatus = topicName;
+        status.textContent = "Topic status";
+        actions.append(status);
+      }
+      const existingButtons = [...row.querySelectorAll("button")];
+      for (const button of existingButtons) actions.append(button);
+      if (topicNames.length) {
+        const description = content.querySelector("p");
+        if (description) description.textContent = "Check current coverage or practise questions from this topic.";
+      }
+      row.append(actions);
+    }
     const isComplete = completed.has(row.dataset.roadmapId);
     row.classList.toggle("is-complete", isComplete);
     const button = row.querySelector("[data-roadmap-complete]");
@@ -251,22 +463,80 @@ function renderRoadmapProgress() {
   $("#roadmap-progress-fill").style.width = `${rows.length ? Math.min(100, 100 * completed.size / rows.length) : 0}%`;
 }
 
-function plannerStorageKey() {
-  const today = new Date();
-  const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  return `interviewready-planner-${localDate}`;
+function initializePlanner() {
+  for (const input of document.querySelectorAll("[data-planner-task]")) {
+    input.checked = checklistProgress.plannerCompleted.has(input.dataset.plannerTask);
+    input.addEventListener("change", async () => {
+      const previous = new Set(checklistProgress.plannerCompleted);
+      if (input.checked) checklistProgress.plannerCompleted.add(input.dataset.plannerTask);
+      else checklistProgress.plannerCompleted.delete(input.dataset.plannerTask);
+      setChecklistControlsDisabled(true);
+      try {
+        await requestJson("/api/user-progress/planner", {
+          method: "PUT",
+          headers: { "X-CSRF-Token": csrfToken },
+          body: JSON.stringify({
+            date: checklistProgress.plannerDate,
+            completed: [...checklistProgress.plannerCompleted],
+          }),
+        });
+      } catch (error) {
+        checklistProgress.plannerCompleted = previous;
+        input.checked = previous.has(input.dataset.plannerTask);
+        showToast(`Planner progress could not be saved: ${error.message}`);
+      } finally {
+        setChecklistControlsDisabled(false);
+      }
+    });
+  }
 }
 
-function initializePlanner() {
-  const saved = new Set(readStoredList(plannerStorageKey()));
-  for (const input of document.querySelectorAll("[data-planner-task]")) {
-    input.checked = saved.has(input.dataset.plannerTask);
-    input.addEventListener("change", () => {
-      const current = new Set(readStoredList(plannerStorageKey()));
-      if (input.checked) current.add(input.dataset.plannerTask);
-      else current.delete(input.dataset.plannerTask);
-      localStorage.setItem(plannerStorageKey(), JSON.stringify([...current]));
-    });
+async function loadChecklistProgress() {
+  const plannerDate = localPlannerDate();
+  try {
+    const saved = await requestJson(`/api/user-progress?date=${encodeURIComponent(plannerDate)}`);
+    checklistProgress.roadmapCompleted = new Set(saved.roadmap_completed);
+    checklistProgress.plannerCompleted = new Set(saved.planner_completed);
+    checklistProgress.plannerDate = saved.date;
+    const roadmapKey = `interviewready-roadmap-completed-${userScope}`;
+    const plannerKey = `interviewready-planner-${userScope}-${plannerDate}`;
+    const legacyRoadmap = readLegacyChecklist(roadmapKey);
+    const legacyPlanner = readLegacyChecklist(plannerKey);
+    let migrated = false;
+    if (legacyRoadmap && legacyRoadmap.length) {
+      const combined = new Set([...checklistProgress.roadmapCompleted, ...legacyRoadmap]);
+      const completed = [...combined];
+      await requestJson("/api/user-progress/roadmap", {
+        method: "PUT",
+        headers: { "X-CSRF-Token": csrfToken },
+        body: JSON.stringify({ completed }),
+      });
+      checklistProgress.roadmapCompleted = combined;
+      localStorage.removeItem(roadmapKey);
+      migrated = true;
+    } else if (legacyRoadmap) {
+      localStorage.removeItem(roadmapKey);
+    }
+    if (legacyPlanner && legacyPlanner.length) {
+      const combined = new Set([...checklistProgress.plannerCompleted, ...legacyPlanner]);
+      const completed = [...combined];
+      await requestJson("/api/user-progress/planner", {
+        method: "PUT",
+        headers: { "X-CSRF-Token": csrfToken },
+        body: JSON.stringify({ date: plannerDate, completed }),
+      });
+      checklistProgress.plannerCompleted = combined;
+      localStorage.removeItem(plannerKey);
+      migrated = true;
+    } else if (legacyPlanner) {
+      localStorage.removeItem(plannerKey);
+    }
+    renderRoadmapProgress();
+    initializePlanner();
+    setChecklistControlsDisabled(false);
+    if (migrated) showToast("Previous browser checklist progress was saved to your account.");
+  } catch (error) {
+    showToast(`Account checklist progress could not be loaded or migrated: ${error.message}`);
   }
 }
 
@@ -277,11 +547,13 @@ function navigateToView(view) {
   }
 }
 
-function configurePractice({ focusAreas = [], interviewType = "Mixed practice" } = {}) {
+function configurePractice({ focusAreas = [], interviewType = "Mixed practice", difficulty = "" } = {}) {
   if (!focusAreas.length) focusAreas = ["Communication", "Problem solving", "Technical depth"];
   if (!$("#role").value) $("#role").value = "Software engineer";
   if (!$("#experience").value) $("#experience").value = "Mid-level (4-7 years)";
   $("#interview-type").value = interviewType;
+  $("#difficulty").value = difficulty;
+  for (const focus of focusAreas) ensureFocusInput(focus);
   for (const input of document.querySelectorAll('input[name="focus"]')) {
     input.checked = focusAreas.includes(input.value);
   }
@@ -298,11 +570,17 @@ document.querySelector("[data-home-link]")?.addEventListener("click", (event) =>
   setView("dashboard");
 });
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   const topicButton = event.target.closest("[data-topic-practice]");
   if (topicButton) {
     const card = topicButton.closest("[data-topic-focus]");
     if (card) configurePractice({ focusAreas: [card.dataset.topicFocus] });
+    return;
+  }
+  const statusButton = event.target.closest("[data-topic-status]");
+  if (statusButton) {
+    const card = statusButton.closest("[data-topic-name]");
+    if (card) openTopicStatus(card.dataset.topicStatusName || card.dataset.topicFocus || card.dataset.topicName);
     return;
   }
   const unavailableButton = event.target.closest("[data-topic-unavailable]");
@@ -324,18 +602,50 @@ document.addEventListener("click", (event) => {
   }
   const roadmapPractice = event.target.closest("[data-roadmap-practice]");
   if (roadmapPractice) {
-    configurePractice({ focusAreas: [roadmapPractice.dataset.roadmapPractice] });
+    const focus = roadmapPractice.dataset.roadmapPractice;
+    configurePractice({
+      focusAreas: [focus],
+      interviewType: focus === "Communication" ? "Behavioral" : "Technical",
+    });
+    return;
+  }
+  const roadmapStatus = event.target.closest("[data-roadmap-status]");
+  if (roadmapStatus) {
+    openTopicStatus(roadmapStatus.dataset.roadmapStatus);
     return;
   }
   const completeButton = event.target.closest("[data-roadmap-complete]");
   if (completeButton) {
-    const completed = new Set(readStoredList(roadmapStorageKey));
+    const previous = new Set(checklistProgress.roadmapCompleted);
     const id = completeButton.dataset.roadmapComplete;
-    if (completed.has(id)) completed.delete(id);
-    else completed.add(id);
-    localStorage.setItem(roadmapStorageKey, JSON.stringify([...completed]));
+    if (checklistProgress.roadmapCompleted.has(id)) checklistProgress.roadmapCompleted.delete(id);
+    else checklistProgress.roadmapCompleted.add(id);
     renderRoadmapProgress();
+    setChecklistControlsDisabled(true);
+    try {
+      await requestJson("/api/user-progress/roadmap", {
+        method: "PUT",
+        headers: { "X-CSRF-Token": csrfToken },
+        body: JSON.stringify({ completed: [...checklistProgress.roadmapCompleted] }),
+      });
+    } catch (error) {
+      checklistProgress.roadmapCompleted = previous;
+      renderRoadmapProgress();
+      showToast(`Roadmap progress could not be saved: ${error.message}`);
+    } finally {
+      setChecklistControlsDisabled(false);
+    }
   }
+});
+
+$("#topic-status-practice").addEventListener("click", (event) => {
+  const focusAreas = JSON.parse(event.currentTarget.dataset.topicFocusAreas || "[]");
+  if (!Array.isArray(focusAreas) || !focusAreas.length) {
+    showToast("No practice focus is available for this topic yet.");
+    return;
+  }
+  const interviewType = focusAreas.includes("Communication") ? "Behavioral" : "Technical";
+  configurePractice({ focusAreas, interviewType });
 });
 
 $("#topic-search").addEventListener("input", () => {
@@ -350,10 +660,27 @@ $("#topic-search").addEventListener("input", () => {
   $("#hub-empty").hidden = visibleCount > 0;
 });
 
-$("#reset-planner").addEventListener("click", () => {
-  localStorage.removeItem(plannerStorageKey());
+$("#reset-planner").addEventListener("click", async () => {
+  const previous = new Set(checklistProgress.plannerCompleted);
+  checklistProgress.plannerCompleted.clear();
   for (const input of document.querySelectorAll("[data-planner-task]")) input.checked = false;
-  showToast("Today's planner checklist has been reset.");
+  setChecklistControlsDisabled(true);
+  try {
+    await requestJson("/api/user-progress/planner", {
+      method: "PUT",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify({ date: checklistProgress.plannerDate, completed: [] }),
+    });
+    showToast("Today's planner checklist has been reset.");
+  } catch (error) {
+    checklistProgress.plannerCompleted = previous;
+    for (const input of document.querySelectorAll("[data-planner-task]")) {
+      input.checked = previous.has(input.dataset.plannerTask);
+    }
+    showToast(`Planner progress could not be reset: ${error.message}`);
+  } finally {
+    setChecklistControlsDisabled(false);
+  }
 });
 
 $("#start-practice")?.addEventListener("click", () => {
@@ -396,6 +723,7 @@ async function makeQuestion(focusAreas = []) {
     $("#question-text").textContent = question.question;
     $("#question-type").textContent = question.question_type.toUpperCase();
     $("#question-difficulty").textContent = question.difficulty.toUpperCase();
+    startQuestionTimer(question);
     $("#practice-error").textContent = "";
       const setupError = $("#setup-error");
       if (setupError) {
@@ -477,6 +805,7 @@ async function refreshQuestionCapacity() {
   const role = $("#role").value === "Other" ? $("#other-role").value.trim() : $("#role").value;
   const experience = $("#experience").value;
   const interviewType = $("#interview-type").value;
+  const difficulty = $("#difficulty").value;
   const focusAreas = [...document.querySelectorAll('input[name="focus"]:checked')].map((input) => input.value);
   const submitButton = $("#setup-form button[type='submit']");
   if (!role || !experience || !interviewType || !focusAreas.length) {
@@ -487,7 +816,7 @@ async function refreshQuestionCapacity() {
   try {
     const capacity = await requestJson("/api/question-capacity", {
       method: "POST",
-      body: JSON.stringify({ role, experience, interview_type: interviewType, focus_areas: focusAreas }),
+      body: JSON.stringify({ role, experience, interview_type: interviewType, focus_areas: focusAreas, difficulty }),
     });
     if (requestId !== capacityRequest) return;
     const note = $("#capacity-note");
@@ -524,6 +853,7 @@ $("#custom-count").addEventListener("input", refreshQuestionCapacity);
 $("#other-role").addEventListener("input", refreshQuestionCapacity);
 $("#experience").addEventListener("change", refreshQuestionCapacity);
 $("#interview-type").addEventListener("change", refreshQuestionCapacity);
+$("#difficulty").addEventListener("change", refreshQuestionCapacity);
 document.querySelectorAll('input[name="focus"]').forEach((input) => input.addEventListener("change", refreshQuestionCapacity));
 
 $("#setup-form").addEventListener("submit", async (event) => {
@@ -542,6 +872,7 @@ $("#setup-form").addEventListener("submit", async (event) => {
     experience: $("#experience").value,
     interview_type: $("#interview-type").value,
     focus_areas: [...document.querySelectorAll('input[name="focus"]:checked')].map((input) => input.value),
+    difficulty: $("#difficulty").value,
     question_count: questionCount,
   };
   const setupError = $("#setup-error");
@@ -554,6 +885,7 @@ $("#setup-form").addEventListener("submit", async (event) => {
       && state.setup?.role === setup.role
       && state.setup?.experience === setup.experience
       && state.setup?.interview_type === setup.interview_type
+      && state.setup?.difficulty === setup.difficulty
       && JSON.stringify(state.setup?.focus_areas) === JSON.stringify(setup.focus_areas)
       && state.questionCount === questionCount;
     if (samePendingSetup) {
@@ -583,25 +915,37 @@ $("#setup-form").addEventListener("submit", async (event) => {
   }
 });
 
-$("#review-answer").addEventListener("click", async (event) => {
+$("#review-answer").addEventListener("click", () => submitAnswer(state.timeExpired));
+
+async function submitAnswer(timedOut) {
+  if (state.submittingAnswer || state.hasReview || !state.question) return;
   const selected = document.querySelector('input[name="selected-option"]:checked');
-  if (!selected) {
+  if (!selected && !timedOut) {
     $("#practice-error").textContent = "Choose one option before checking your answer.";
     return;
   }
-  const button = event.currentTarget;
+  const button = $("#review-answer");
+  state.submittingAnswer = true;
   $("#practice-error").textContent = "";
   button.dataset.label = button.querySelector("span").textContent;
-  setBusy(button, true, "Checking answer...");
+  setBusy(button, true, timedOut ? "Saving timeout..." : "Checking answer...");
+  stopQuestionTimer();
+  const elapsedSeconds = Math.min(
+    state.timeLimitSeconds,
+    Math.floor((Date.now() - state.questionStartedAt) / 1000),
+  );
   try {
     const result = await requestJson(`/api/sessions/${state.sessionId}/reviews`, {
       method: "POST",
       body: JSON.stringify({
         question_id: state.question.question_id,
-        selected_option: selected.value,
+        selected_option: selected?.value || "",
         round_number: state.roundNumber,
+        elapsed_seconds: timedOut ? state.timeLimitSeconds : elapsedSeconds,
+        timed_out: timedOut,
       }),
     });
+    state.timeExpired = timedOut;
     state.hasReview = true;
     state.roundComplete = state.retryMode || state.questionNumber >= state.questionCount;
     renderAnswerReview(result);
@@ -609,11 +953,18 @@ $("#review-answer").addEventListener("click", async (event) => {
     if (state.roundComplete && !state.retryMode) await renderRoundSummary();
   } catch (error) {
     $("#practice-error").textContent = error.message;
+    if (timedOut) {
+      state.timeExpired = true;
+      renderTimer(0);
+    } else {
+      startQuestionTimer(state.question, true);
+    }
   } finally {
     setBusy(button, false, "Check Answer");
     button.disabled = state.hasReview;
+    state.submittingAnswer = false;
   }
-});
+}
 
 function renderAnswerReview(result) {
   const { review } = result;
@@ -623,13 +974,17 @@ function renderAnswerReview(result) {
   verdict.classList.toggle("is-correct", review.is_correct);
   verdict.classList.toggle("is-incorrect", !review.is_correct);
   $("#verdict-mark").textContent = review.is_correct ? "✓" : "×";
-  $("#verdict-label").textContent = review.is_correct ? "CORRECT ANSWER" : "ANSWER REVIEW";
-  $("#verdict-title").textContent = review.is_correct ? "Correct answer!" : "Incorrect answer";
+  $("#verdict-label").textContent = review.timed_out ? "TIME EXPIRED" : review.is_correct ? "CORRECT ANSWER" : "ANSWER REVIEW";
+  $("#verdict-title").textContent = review.timed_out ? "Time is up" : review.is_correct ? "Correct answer!" : "Incorrect answer";
   $("#answer-score").textContent = "";
-  $("#review-feedback").textContent = review.is_correct
+  $("#review-feedback").textContent = review.timed_out
+    ? "The timer expired before an answer was submitted. This question is recorded as incorrect."
+    : review.is_correct
     ? `You selected ${review.selected_option}: ${result.selected_text}`
     : `Your answer (${review.selected_option}) was incorrect. ${review.option_explanations[review.selected_option]}`;
-  $("#answer-explanation-text").textContent = review.option_explanations[review.selected_option];
+  $("#answer-explanation-text").textContent = review.timed_out
+    ? review.explanation
+    : review.option_explanations[review.selected_option];
   $("#answer-comparison").textContent = review.is_correct
     ? `Why it is best: ${result.correct_text}`
     : `Correct answer: ${review.correct_option}. ${result.correct_text}. ${review.explanation}`;
@@ -677,11 +1032,18 @@ async function renderRoundSummary() {
     $("#round-score").textContent = score;
     $("#round-score").classList.toggle("score-low", summary.accuracy < 60);
     $("#round-score").classList.toggle("score-perfect", summary.accuracy === 100);
+    $("#result-grade").textContent = summary.grade || "—";
+    $("#candidate-result").textContent = [
+      summary.full_name,
+      summary.attempt_number ? `Attempt ${summary.attempt_number}` : "",
+      formatDate(summary.created_at),
+    ].filter(Boolean).join(" · ");
     $("#result-attempted").textContent = summary.attempted_count;
     $("#result-correct").textContent = summary.correct_count;
     $("#result-incorrect").textContent = summary.incorrect_count;
     $("#result-accuracy").textContent = `${summary.accuracy}%`;
     $("#round-feedback").textContent = summary.feedback;
+    $("#performance-feedback").textContent = summary.performance_feedback;
     renderFocusSummary(summary.focus_stats);
     renderList("#improvement-list", summary.improvement_areas.map((area) => `Focus on ${area}.`));
     renderList("#next-steps-list", summary.next_steps);
@@ -730,7 +1092,9 @@ function renderRoundResults(items) {
     question.textContent = item.question;
     const selected = document.createElement("p");
     selected.className = "recap-answer";
-    selected.textContent = `Your choice: ${item.selected_option}. ${item.options[item.selected_option]}`;
+    selected.textContent = item.timed_out
+      ? "Your choice: Time expired."
+      : `Your choice: ${item.selected_option}. ${item.options[item.selected_option]}`;
     const correct = document.createElement("p");
     correct.className = "recap-answer";
     correct.textContent = `Correct: ${item.correct_option}. ${item.options[item.correct_option]}`;
@@ -811,6 +1175,7 @@ async function retryQuestion(questionId) {
     $("#question-text").textContent = retry.question;
     $("#question-index").textContent = `INTENTIONAL RETRY · ROUND ${state.roundNumber}`;
     $("#practice-error").textContent = "";
+    startQuestionTimer(retry);
     updateProgress();
     showStage("practice");
   } catch (error) {
@@ -861,7 +1226,7 @@ function showToast(message) {
 }
 
 setView("dashboard");
-renderRoadmapProgress();
-initializePlanner();
+setChecklistControlsDisabled(true);
+loadChecklistProgress();
 loadDashboard();
 loadTopicAvailability();

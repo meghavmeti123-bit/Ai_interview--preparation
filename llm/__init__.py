@@ -1,1 +1,1 @@
-"""OpenAI-powered interview practice services."""
+"""NVIDIA-compatible interview practice services."""

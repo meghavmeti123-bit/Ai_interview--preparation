@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101012">
+  <title>{{ 'Create account' if mode == 'signup' else 'Sign in' }} | InterviewReady AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='redesign.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('login') }}" aria-label="InterviewReady AI"><span class="brand-mark">IR</span><span>InterviewReady<span class="brand-period"> AI</span></span></a>
+  </header>
+  <main class="auth-layout">
+    <section class="auth-card" aria-labelledby="auth-title">
+      <span class="eyebrow">YOUR PRIVATE PREPARATION SPACE</span>
+      <h1 id="auth-title">{{ 'Create your account' if mode == 'signup' else 'Welcome back' }}</h1>
+      <p class="auth-lede">{{ 'Save your preparation progress and pick up where you left off.' if mode == 'signup' else 'Sign in to continue your interview preparation.' }}</p>
+      {% if error %}<p class="auth-error" role="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="{{ url_for('signup_submit' if mode == 'signup' else 'login_submit') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if mode == 'signup' %}
+        <label for="full-name">Full name</label>
+        <input id="full-name" name="full_name" type="text" autocomplete="name" maxlength="100" required>
+        {% endif %}
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="{{ 'new-password' if mode == 'signup' else 'current-password' }}" minlength="{{ 10 if mode == 'signup' else 1 }}" maxlength="128" required>
+        {% if mode == 'signup' %}
+        <label for="confirm-password">Confirm password</label>
+        <input id="confirm-password" name="confirm_password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+        <p class="auth-hint">Use at least 10 characters.</p>
+        {% endif %}
+        <button class="button button-dark auth-submit" type="submit">{{ 'Create account' if mode == 'signup' else 'Sign in' }}</button>
+      </form>
+      <p class="auth-switch">{{ 'Already have an account?' if mode == 'signup' else 'New to InterviewReady AI?' }}
+        <a href="{{ url_for('login' if mode == 'signup' else 'signup') }}">{{ 'Sign in' if mode == 'signup' else 'Create an account' }}</a>
+      </p>
+    </section>
+  </main>
+</body>
+</html>

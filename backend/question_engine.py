@@ -46,7 +46,10 @@ def _item(
         "experience_level": "adaptive",
         "interview_category": category,
         "focus_area": focus,
+        "topic": focus,
+        "subtopic": question_type,
         "difficulty": difficulty,
+        "estimated_time_minutes": {"Easy": 5, "Medium": 12, "Hard": 25}.get(difficulty, 12),
         "question_type": question_type,
         "format": "multiple_choice" if options else "open_ended",
         "concept_id": concept,
@@ -126,6 +129,17 @@ QUESTION_BANK: list[dict[str, Any]] = [
     _item("general-incident-communication", "During an incident, a stakeholder asks for an exact recovery time before the team has isolated the cause. How would you respond while keeping the response coordinated?", "Communication", "Behavioral", "Behavioral", "incident-status-uncertainty", "incident-unknown-eta", "State confirmed impact and current actions, avoid inventing an ETA, provide the next update time, identify an incident communication owner, and update the estimate as evidence changes.", ["Separates facts from assumptions", "Provides a reliable update cadence", "Coordinates ownership and follow-up"], tags=("incident", "communication", "leadership")),
     _item("general-tradeoff", "Tell me about a technical decision where you had to balance delivery speed against reliability or maintainability. What alternatives did you consider, and what evidence changed your decision?", "Leadership", "Behavioral", "Behavioral", "engineering-tradeoff-evidence", "delivery-reliability-tradeoff", "A strong response gives the context and constraints, compares alternatives, explains evidence and risk, communicates the decision, and reflects on the outcome.", ["Gives a specific situation and constraints", "Compares alternatives using evidence", "Explains outcome and learning"], tags=("behavioral", "decision-making", "trade-offs")),
 ]
+
+from backend.dsa_question_bank import (
+    DSA_REFERENCE,
+    build_communication_questions,
+    build_core_questions,
+    build_questions,
+)
+
+QUESTION_BANK.extend(build_questions())
+QUESTION_BANK.extend(build_communication_questions())
+QUESTION_BANK.extend(build_core_questions())
 
 _FOCUS_ALIASES = {
     "communication": {"communication", "collaboration", "leadership"},
@@ -234,6 +248,11 @@ def select_bank_question(
     available_families = {family, "general"}
     desired_format = requested_format(question_number, setup["interview_type"])
     desired_type = requested_question_type(question_number, setup["interview_type"])
+    selected_difficulty = str(setup.get("difficulty") or "").strip()
+    eligible_questions = [
+        item for item in QUESTION_BANK
+        if not selected_difficulty or item["difficulty"].casefold() == selected_difficulty.casefold()
+    ]
     category_map = {
         "behavioral": {"Behavioral", "Situational"},
         "technical": {"Technical", "System design"},
@@ -242,7 +261,7 @@ def select_bank_question(
     }
     allowed_categories = category_map.get(setup["interview_type"].casefold())
     type_candidates = [
-        item for item in QUESTION_BANK
+        item for item in eligible_questions
         if item["role_family"] in available_families and item["format"] == desired_format
         and (desired_type == "Follow-up" or item["question_type"] == desired_type)
         and (not allowed_categories or item["interview_category"] in allowed_categories)
@@ -250,14 +269,14 @@ def select_bank_question(
     ]
     if not type_candidates:
         type_candidates = [
-            item for item in QUESTION_BANK
+            item for item in eligible_questions
             if item["role_family"] in available_families and item["format"] == desired_format
             and not is_duplicate(item, history)
             and (not allowed_categories or item["interview_category"] in allowed_categories)
         ]
     if not type_candidates:
         type_candidates = [
-            item for item in QUESTION_BANK
+            item for item in eligible_questions
             if item["role_family"] in available_families and item["format"] == "multiple_choice"
             and not is_duplicate(item, history)
             and (not allowed_categories or item["interview_category"] in allowed_categories)
@@ -278,7 +297,8 @@ def select_bank_question(
     }
     question["correct_option"] = next(label for label, prior in label_map.items() if prior == original_correct)
     question["experience_level"] = setup["experience"]
-    question["difficulty"] = _difficulty(setup["experience"])
+    if question.get("source") != "InterviewReady AI original question":
+        question["difficulty"] = _difficulty(setup["experience"])
     question["role"] = setup["role"]
     return validate_question(question)
 
@@ -294,8 +314,10 @@ def count_available_questions(setup: dict[str, Any], history: list[dict[str, Any
         "hiring manager": {"Behavioral", "System design", "Situational"},
     }
     allowed_categories = category_map.get(setup["interview_type"].casefold())
+    selected_difficulty = str(setup.get("difficulty") or "").strip()
     return sum(
         item["format"] == "multiple_choice"
+        and (not selected_difficulty or item["difficulty"].casefold() == selected_difficulty.casefold())
         and item["role_family"] in families
         and (not selected_focus or matches_focus(item["focus_area"], selected_focus))
         and (not allowed_categories or item["interview_category"] in allowed_categories)

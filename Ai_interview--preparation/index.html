@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Interview Preparation</title>
+  <style>
+    /* General App Styling */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 0;
+    }
+
+    .app-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      color: #38bdf8;
+      margin: 0;
+    }
+
+    /* Interview Main Layout Grid */
+    .interview-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .interview-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .question-section {
+      background-color: #1e293b;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .question-title {
+      font-size: 1.15rem;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    /* Proctor Webcam Sidebar Component */
+    .sidebar-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .proctor-box {
+      position: relative;
+      width: 100%;
+      height: 220px;
+      background-color: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #webcamFeed {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Mirror camera for natural look */
+    }
+
+    .error-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.95);
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 15px;
+      text-align: center;
+      z-index: 10;
+    }
+
+    .error-overlay p {
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: #f87171;
+      line-height: 1.4;
+    }
+
+    .retry-btn {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .retry-btn:hover {
+      background-color: #1d4ed8;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <header>
+      <h1>AI Interview Preparation</h1>
+      <span>Round 01 / Practice</span>
+    </header>
+
+    <div class="interview-grid">
+      <!-- Left Column: Interview Question & Content -->
+      <div class="question-section">
+        <h3>Choose the best answer</h3>
+        <p class="question-title">
+          A query that used to meet its latency objective now scans millions of rows after tenant data grew. Which first step is most likely to identify a targeted fix?
+        </p>
+        <!-- Add your question options, radio buttons, or interactive components here -->
+      </div>
+
+      <!-- Right Column: AI Proctorship & Webcam Feed -->
+      <div class="sidebar-panel">
+        <div class="proctor-box">
+          <!-- Active Camera Video Stream -->
+          <video id="webcamFeed" autoplay playsinline muted></video>
+
+          <!-- Fallback Overlay Box for Permissions / Errors -->
+          <div id="cameraErrorBox" class="error-overlay" style="display: none;">
+            <p id="errorMessage">Camera permission required.</p>
+            <button id="retryCameraBtn" class="retry-btn">Retry Camera Permission</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Link your separate camera.js script file -->
+  <script src="camera.js"></script>
+
+</body>
+</html>

@@ -12,18 +12,20 @@ from openpyxl import Workbook, load_workbook
 
 _LOCK = threading.RLock()
 _HEADERS = {
-    "Sessions": ["session_id", "created_at", "role", "experience", "interview_type", "focus_areas", "question_count"],
+    "Sessions": ["session_id", "created_at", "role", "experience", "interview_type", "focus_areas", "question_count", "user_id", "full_name", "difficulty"],
     "Practice": [
         "question_id", "session_id", "created_at", "focus_area", "question", "sample_answer",
         "options_json", "correct_option", "explanation", "round_number", "role", "role_family",
         "experience_level", "interview_category", "difficulty", "question_type", "format", "concept_id",
         "scenario_id", "bank_question_id", "expected_answer", "evaluation_criteria_json", "tags_json", "option_explanations_json", "source",
         "intentional_retry", "retry_of_question_id", "follow_up_to_question_id",
+        "topic", "subtopic", "estimated_time_minutes", "source_reference", "time_limit_seconds",
     ],
     "Reviews": [
         "review_id", "session_id", "question_id", "reviewed_at", "candidate_answer", "score",
         "strengths", "growth_areas", "next_steps", "feedback", "selected_option", "correct_option",
         "is_correct", "explanation", "round_number", "format", "evaluation_json",
+        "elapsed_seconds", "timed_out",
     ],
 }
 
@@ -63,7 +65,10 @@ def _records(sheet) -> list[dict[str, Any]]:
     return [dict(zip(headers, row)) for row in rows if any(value is not None for value in row)]
 
 
-def create_session(path: Path, setup: dict[str, Any], question_count: int = 5) -> str:
+def create_session(
+    path: Path, setup: dict[str, Any], question_count: int = 5, *,
+    user_id: str = "", full_name: str = "",
+) -> str:
     with _LOCK:
         workbook = _open(Path(path))
         session_id = str(uuid.uuid4())
@@ -75,6 +80,9 @@ def create_session(path: Path, setup: dict[str, Any], question_count: int = 5) -
             "interview_type": setup["interview_type"],
             "focus_areas": ", ".join(setup["focus_areas"]),
             "question_count": question_count,
+            "user_id": user_id,
+            "full_name": full_name,
+            "difficulty": setup.get("difficulty", ""),
         })
         workbook.save(path)
         return session_id
@@ -130,6 +138,11 @@ def add_practice(
             "intentional_retry": intentional_retry,
             "retry_of_question_id": retry_of_question_id,
             "follow_up_to_question_id": practice.get("follow_up_to_question_id", ""),
+            "topic": practice.get("topic", practice.get("focus_area", "")),
+            "subtopic": practice.get("subtopic", ""),
+            "estimated_time_minutes": practice.get("estimated_time_minutes", ""),
+            "source_reference": practice.get("source_reference", ""),
+            "time_limit_seconds": practice.get("time_limit_seconds", ""),
         }
         _append_record(workbook["Practice"], values)
         workbook.save(path)
@@ -138,6 +151,7 @@ def add_practice(
 
 def add_review(
     path: Path, session_id: str, question_id: str, answer: str, review: dict[str, Any], round_number: int,
+    *, elapsed_seconds: int = 0, timed_out: bool = False,
 ) -> None:
     with _LOCK:
         workbook = _open(Path(path))
@@ -159,6 +173,8 @@ def add_review(
             "round_number": round_number,
             "format": review.get("format", "multiple_choice"),
             "evaluation_json": json.dumps(review),
+            "elapsed_seconds": elapsed_seconds,
+            "timed_out": timed_out,
         }
         _append_record(workbook["Reviews"], values)
         workbook.save(path)
@@ -180,12 +196,22 @@ def get_session(path: Path, session_id: str) -> dict[str, Any] | None:
         return {"session": session, "practice": practice, "reviews": reviews}
 
 
-def get_dashboard_summary(path: Path, limit: int = 5) -> dict[str, Any]:
+def get_dashboard_summary(
+    path: Path,
+    limit: int = 5,
+    user_id: str | None = None,
+    grade_thresholds: dict[str, int] | None = None,
+) -> dict[str, Any]:
     with _LOCK:
         workbook = _open(Path(path))
         sessions = sorted(_records(workbook["Sessions"]), key=lambda row: str(row.get("created_at") or ""), reverse=True)
         practice_rows = _records(workbook["Practice"])
         review_rows = _records(workbook["Reviews"])
+        if user_id is not None:
+            sessions = [row for row in sessions if str(row.get("user_id") or "") == user_id]
+            owned_session_ids = {str(row["session_id"]) for row in sessions}
+            practice_rows = [row for row in practice_rows if str(row.get("session_id")) in owned_session_ids]
+            review_rows = [row for row in review_rows if str(row.get("session_id")) in owned_session_ids]
         reviews_by_session: dict[str, list[dict[str, Any]]] = {}
         reviews_by_question: dict[tuple[str, str], dict[str, Any]] = {}
         practice_by_session: dict[str, list[dict[str, Any]]] = {}
@@ -195,14 +221,26 @@ def get_dashboard_summary(path: Path, limit: int = 5) -> dict[str, Any]:
         for practice in practice_rows:
             if not _as_bool(practice.get("intentional_retry")):
                 practice_by_session.setdefault(str(practice["session_id"]), []).append(practice)
-        attempted = len(review_rows)
-        correct = sum(_as_bool(row.get("is_correct")) for row in review_rows)
+        base_question_ids = {
+            (str(row["session_id"]), str(row["question_id"]))
+            for row in practice_rows
+            if not _as_bool(row.get("intentional_retry"))
+        }
+        base_review_rows = [
+            row for row in review_rows
+            if (str(row["session_id"]), str(row["question_id"])) in base_question_ids
+        ]
+        attempted = len(base_review_rows)
+        correct = sum(_as_bool(row.get("is_correct")) for row in base_review_rows)
         focus_summary: dict[str, dict[str, int]] = {}
         completed_sessions = 0
         for session in sessions:
             session_id = str(session["session_id"])
             requested_count = int(session.get("question_count") or 0)
-            base_practice = practice_by_session.get(session_id, [])
+            base_practice = [
+                row for row in practice_by_session.get(session_id, [])
+                if int(row.get("round_number") or 1) == 1
+            ]
             reviewed_ids = {
                 str(row["question_id"]) for row in base_practice
                 if (session_id, str(row["question_id"])) in reviews_by_question
@@ -218,26 +256,52 @@ def get_dashboard_summary(path: Path, limit: int = 5) -> dict[str, Any]:
                 focus_summary[area]["total"] += 1
                 focus_summary[area]["correct"] += int(_as_bool(review.get("is_correct")))
         recent = []
+        completed_attempt_numbers: dict[str, int] = {}
+        attempt_number = 0
+        for session in reversed(sessions):
+            session_id = str(session["session_id"])
+            requested_count = int(session.get("question_count") or 0)
+            base_practice = [
+                row for row in practice_by_session.get(session_id, [])
+                if int(row.get("round_number") or 1) == 1
+            ]
+            reviewed_count = sum(
+                (session_id, str(row["question_id"])) in reviews_by_question
+                for row in base_practice
+            )
+            if requested_count > 0 and reviewed_count >= requested_count:
+                attempt_number += 1
+                completed_attempt_numbers[session_id] = attempt_number
         for session in sessions[:max(0, limit)]:
             session_id = str(session["session_id"])
-            session_reviews = reviews_by_session.get(session_id, [])
+            session_reviews = [
+                row for row in reviews_by_session.get(session_id, [])
+                if (session_id, str(row["question_id"])) in base_question_ids
+            ]
             session_attempted = len(session_reviews)
             session_correct = sum(_as_bool(row.get("is_correct")) for row in session_reviews)
+            session_accuracy = round(100 * session_correct / session_attempted) if session_attempted else None
             recent.append({
                 "session_id": session_id,
                 "role": session.get("role", "Interview practice"),
                 "experience": session.get("experience", ""),
                 "created_at": session.get("created_at", ""),
+                "full_name": session.get("full_name", ""),
                 "requested_question_count": int(session.get("question_count") or 0),
                 "attempted_count": session_attempted,
-                "accuracy": round(100 * session_correct / session_attempted) if session_attempted else None,
+                "correct_count": session_correct,
+                "accuracy": session_accuracy,
+                "grade": _grade(session_accuracy, grade_thresholds),
+                "attempt_number": completed_attempt_numbers.get(session_id),
+                "completed": session_id in completed_attempt_numbers,
             })
         return {
             "session_count": len(sessions),
-            "question_count": len(practice_rows),
+            "question_count": len(base_question_ids),
             "attempted_count": attempted,
             "accuracy": round(100 * correct / attempted) if attempted else None,
             "completed_session_count": completed_sessions,
+            "full_name": sessions[0].get("full_name", "") if sessions else "",
             "topic_stats": [
                 {"focus_area": area, **counts}
                 for area, counts in sorted(
@@ -252,3 +316,16 @@ def _as_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().casefold() in {"1", "true", "yes", "y"}
+
+
+def _grade(accuracy: int | None, thresholds: dict[str, int] | None = None) -> str | None:
+    if accuracy is None:
+        return None
+    thresholds = thresholds or {"A": 90, "B": 75, "C": 50}
+    if accuracy >= int(thresholds["A"]):
+        return "A"
+    if accuracy >= int(thresholds["B"]):
+        return "B"
+    if accuracy >= int(thresholds["C"]):
+        return "C"
+    return "D"

@@ -48,7 +48,12 @@ _QUESTION_SCHEMA = {
 
 
 def _complete(api_key: str, model: str, system_prompt: str, user_prompt: str, response_format: dict[str, Any] | None = None) -> dict[str, Any]:
-    client = OpenAI(api_key=api_key, timeout=25.0, max_retries=2)
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://integrate.api.nvidia.com/v1",
+        timeout=25.0,
+        max_retries=2,
+    )
     response = client.chat.completions.create(
         model=model,
         response_format=response_format or {"type": "json_object"},
@@ -123,7 +128,7 @@ def generate_question(
             "role": setup["role"],
             "experience_level": setup["experience"],
             "focus_area": focus_area,
-            "source": "openai",
+            "source": "nvidia",
         }
         if question.get("format") != requested_format or question.get("question_type") != requested_type:
             last_error = ValueError("The AI returned the wrong question type or format.")

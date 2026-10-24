@@ -14,12 +14,12 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='engine.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='redesign.css') }}">
-  <script defer src="{{ url_for('static', filename='app.js', v='dark-dashboard-1') }}"></script>
+  <script defer src="{{ url_for('static', filename='app.js', v='account-checklists-1') }}"></script>
 </head>
-<body data-demo-mode="{{ 'true' if demo_mode else 'false' }}" data-max-question-count="{{ max_question_count }}">
+<body data-demo-mode="{{ 'true' if demo_mode else 'false' }}" data-max-question-count="{{ max_question_count }}" data-user-scope="{{ current_user.user_id }}" data-csrf-token="{{ csrf_token }}">
   <header class="topbar">
     <a class="brand" href="/" aria-label="InterviewReady AI dashboard" data-home-link><span class="brand-mark">IR</span><span>InterviewReady<span class="brand-period"> AI</span></span></a>
-    <div class="topbar-right"><span class="privacy-note"><span class="status-dot"></span>Private practice space</span><span class="mode-pill" id="mode-pill">{{ 'DEMO MODE' if demo_mode else 'AI COACH' }}</span></div>
+    <div class="topbar-right"><span class="user-greeting">Signed in as <strong>{{ current_user.full_name }}</strong></span><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="text-action signout-button" type="submit">Sign out</button></form><span class="mode-pill" id="mode-pill">{{ 'DEMO MODE' if demo_mode else 'AI COACH' }}</span></div>
   </header>
 
   <main class="layout">
@@ -33,7 +33,6 @@
         <button class="primary-link" data-view-link="mock" type="button"><span class="nav-symbol">◎</span>Mock Interviews</button>
         <button class="primary-link" data-view-link="progress" type="button"><span class="nav-symbol">↗</span>Progress Tracker</button>
         <button class="primary-link" data-view-link="experiences" type="button"><span class="nav-symbol">◷</span>Interview Experiences</button>
-        <button class="primary-link" data-view-link="resources" type="button"><span class="nav-symbol">▧</span>Resources</button>
       </nav>
       <nav class="stage-nav" aria-label="Interview practice stages">
         <button class="stage-link active" data-stage="setup" type="button"><span class="stage-number">01</span><span>Set up</span><span class="stage-state">NOW</span></button>
@@ -58,17 +57,26 @@
           <div class="topic-grid" id="dashboard-topics">
             <article class="topic-card" data-topic-name="HR Interview Questions" data-topic-focus="Communication"><span class="topic-icon">✦</span><h4>HR Interview Questions</h4><p>Communication, collaboration, and people-focused scenarios.</p><span class="topic-count" data-count-focus="Communication">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
             <article class="topic-card" data-topic-name="Technical Interview Questions" data-topic-focus="Technical depth"><span class="topic-icon">⌘</span><h4>Technical Interview Questions</h4><p>Engineering decisions, trade-offs, and technical reasoning.</p><span class="topic-count" data-count-focus="Technical depth">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
-            <article class="topic-card" data-topic-name="Programming Fundamentals" data-topic-focus="Problem solving"><span class="topic-icon">{ }</span><h4>Programming Fundamentals</h4><p>Work through problem-solving questions from the available bank.</p><span class="topic-count" data-count-focus="Problem solving">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
-            <article class="topic-card" data-topic-name="Data Structures and Algorithms"><span class="topic-icon">⌁</span><h4>Data Structures &amp; Algorithms</h4><p>Dedicated DSA questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
-            <article class="topic-card" data-topic-name="Object-Oriented Programming"><span class="topic-icon">◫</span><h4>Object-Oriented Programming</h4><p>Dedicated OOP questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
-            <article class="topic-card" data-topic-name="Database Management Systems"><span class="topic-icon">▤</span><h4>Database Management Systems</h4><p>Dedicated DBMS questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
-            <article class="topic-card" data-topic-name="Operating Systems"><span class="topic-icon">◧</span><h4>Operating Systems</h4><p>Dedicated operating-system questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
-            <article class="topic-card" data-topic-name="Computer Networks"><span class="topic-icon">⌘</span><h4>Computer Networks</h4><p>Dedicated networking questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Programming Fundamentals" data-topic-focus="Programming Fundamentals"><span class="topic-icon">{ }</span><h4>Programming Fundamentals</h4><p>Original programming concepts and problem-solving questions.</p><span class="topic-count" data-count-focus="Programming Fundamentals">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Data Structures and Algorithms" data-topic-status-name="Data Structures and Algorithms"><span class="topic-icon">⌁</span><h4>Data Structures &amp; Algorithms</h4><p>Explore original questions across the DSA learning path.</p><span class="topic-count">Checking availability…</span><button type="button" class="topic-action" data-topic-status>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Object-Oriented Programming" data-topic-status-name="Object-Oriented Programming"><span class="topic-icon">◫</span><h4>Object-Oriented Programming</h4><p>Check current question coverage and topic availability.</p><span class="topic-count is-muted">Checking availability…</span><button type="button" class="topic-action" data-topic-status>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Database Management Systems" data-topic-status-name="Database Management Systems"><span class="topic-icon">▤</span><h4>Database Management Systems</h4><p>Check current question coverage and topic availability.</p><span class="topic-count is-muted">Checking availability…</span><button type="button" class="topic-action" data-topic-status>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Operating Systems" data-topic-status-name="Operating Systems"><span class="topic-icon">◧</span><h4>Operating Systems</h4><p>Check current question coverage and topic availability.</p><span class="topic-count is-muted">Checking availability…</span><button type="button" class="topic-action" data-topic-status>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Computer Networks" data-topic-status-name="Computer Networks"><span class="topic-icon">⌘</span><h4>Computer Networks</h4><p>Check current question coverage and topic availability.</p><span class="topic-count is-muted">Checking availability…</span><button type="button" class="topic-action" data-topic-status>View topic status <span aria-hidden="true">→</span></button></article>
             <article class="topic-card" data-topic-name="Coding and Problem-Solving" data-topic-focus="Problem solving"><span class="topic-icon">↗</span><h4>Coding &amp; Problem-Solving</h4><p>Practise clear problem analysis with existing engineering scenarios.</p><span class="topic-count" data-count-focus="Problem solving">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
             <article class="topic-card" data-topic-name="Communication Skills" data-topic-focus="Communication"><span class="topic-icon">◌</span><h4>Communication Skills</h4><p>Strengthen how you explain decisions and collaborate.</p><span class="topic-count" data-count-focus="Communication">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
           </div>
         </section>
         <section class="resource-strip"><div><span class="eyebrow">KEEP BUILDING MOMENTUM</span><h3>Choose a useful next step</h3></div><button type="button" class="resource-link" data-view-link="roadmap">Follow the learning roadmap <span>→</span></button><button type="button" class="resource-link" data-view-link="progress">Review your progress <span>→</span></button><button type="button" class="resource-link" data-view-link="mock">Set up a mock interview <span>→</span></button></section>
+      </section>
+
+      <section class="app-page" id="page-topic-status" hidden>
+        <button type="button" class="text-action topic-back" data-view-link="hub">← Back to Prep Hub</button>
+        <div class="page-intro"><span class="eyebrow">QUESTION BANK STATUS</span><h3 id="topic-status-title">Topic</h3><p id="topic-status-description">Checking matching questions…</p></div>
+        <div class="progress-metrics topic-status-metrics"><article><span id="topic-status-count">—</span><small>AVAILABLE QUESTIONS</small></article><article><span id="topic-status-easy">0</span><small>EASY</small></article><article><span id="topic-status-medium">0</span><small>MEDIUM</small></article><article><span id="topic-status-hard">0</span><small>HARD</small></article></div>
+        <section class="content-section"><div class="section-heading"><div><h3>Available question topics</h3><p>Question previews are sourced from the original local question bank.</p></div></div><div id="topic-status-questions"></div></section>
+        <a class="resource-link topic-reference" id="topic-reference" href="https://takeuforward.org/prep-hub/strivers-a2z-dsa-sheet" target="_blank" rel="noopener noreferrer" hidden>Open the official DSA learning reference <span aria-hidden="true">↗</span></a>
+        <button type="button" class="button button-dark" id="topic-status-practice" data-topic-focus="">Practise available questions</button>
       </section>
 
       <section class="app-page" id="page-practice" hidden>
@@ -81,6 +89,7 @@
           <div class="field-grid">
             <div><label class="field-label" for="experience">EXPERIENCE LEVEL</label><select class="select-input" id="experience" name="experience" required><option value="" disabled selected>Select level</option><option>Entry level</option><option>Early career (1-3 years)</option><option>Mid-level (4-7 years)</option><option>Senior (8+ years)</option><option>Career change</option></select></div>
             <div><label class="field-label" for="interview-type">INTERVIEW TYPE</label><select class="select-input" id="interview-type" name="interview_type" required><option value="" disabled selected>Select format</option><option>Behavioral</option><option>Technical</option><option>Situational</option><option>Hiring manager</option><option>Mixed practice</option></select></div>
+            <div><label class="field-label" for="difficulty">DIFFICULTY</label><select class="select-input" id="difficulty" name="difficulty"><option value="">Any difficulty</option><option>Easy</option><option>Medium</option><option>Hard</option></select></div>
           </div>
           <fieldset class="count-fieldset"><legend class="field-label">HOW MANY QUESTIONS WOULD YOU LIKE TO ATTEMPT?</legend><div class="count-options" role="radiogroup" aria-label="Question count">
             <label class="count-option"><input type="radio" name="question-count-choice" value="5" checked><span>05</span></label>
@@ -104,7 +113,7 @@
       </section>
 
       <section class="stage-panel" id="panel-practice" hidden>
-        <div class="question-meta"><span class="tag" id="question-focus">FOCUS AREA</span><span class="question-index" id="question-index">QUESTION 01 / 05</span></div>
+        <div class="question-meta"><span class="tag" id="question-focus">FOCUS AREA</span><span class="question-index" id="question-index">QUESTION 01 / 05</span><div class="question-timer" role="timer" aria-live="off"><span>TIME REMAINING</span><strong id="timer-display">--:--</strong></div></div>
         <div class="progress-track" role="progressbar" aria-label="Question progress" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0"><span id="progress-fill"></span></div>
         <div class="question-block"><span class="quote-mark">“</span><h3 id="question-text">Your question will appear here.</h3></div>
         <div class="question-type-line"><span class="question-type" id="question-type">SCENARIO</span><span class="question-difficulty" id="question-difficulty">INTERMEDIATE</span></div>
@@ -118,9 +127,10 @@
         <p class="review-summary" id="review-feedback"></p>
         <div class="answer-explanation" id="answer-explanation" aria-live="polite"><span class="field-label">ANSWER EXPLANATION</span><p id="answer-explanation-text"></p><p class="answer-comparison" id="answer-comparison"></p><ul class="option-explanations" id="option-explanations"></ul></div>
         <section class="round-review" id="round-review" hidden>
-          <div class="round-score-line"><div><span class="eyebrow">INTERVIEW READINESS REPORT</span><h3>Your results</h3></div><div class="round-score" id="round-score">0 / 5</div></div>
+          <div class="round-score-line"><div><span class="eyebrow">INTERVIEW READINESS REPORT</span><h3>Your results</h3><p class="candidate-result" id="candidate-result"></p></div><div class="score-badge"><span class="grade-badge" id="result-grade">—</span><div class="round-score" id="round-score">0 / 5</div></div></div>
           <div class="results-metrics"><div><span id="result-attempted">0</span><small>ATTEMPTED</small></div><div><span id="result-correct">0</span><small>CORRECT</small></div><div><span id="result-incorrect">0</span><small>INCORRECT</small></div><div><span id="result-accuracy">0%</span><small>ACCURACY</small></div></div>
           <p class="round-feedback" id="round-feedback"></p>
+          <p class="performance-feedback" id="performance-feedback"></p>
           <div class="focus-summary"><span class="field-label">FOCUS AREA RESULTS</span><ul id="focus-summary-list"></ul></div>
           <div class="next-steps"><span class="field-label">AREAS TO IMPROVE</span><ul id="improvement-list"></ul></div>
           <div class="next-steps"><span class="field-label">YOUR NEXT MOVES</span><ol id="next-steps-list"></ol></div>
@@ -167,11 +177,11 @@
       </section>
 
       <section class="app-page" id="page-progress" hidden>
-        <div class="page-intro"><span class="eyebrow">BASED ON SAVED WORKBOOK DATA</span><h3>Progress Tracker</h3><p>Performance figures are calculated from stored practice sessions and answer reviews.</p></div>
+        <div class="page-intro"><span class="eyebrow">BASED ON SAVED WORKBOOK DATA</span><h3>Progress Tracker</h3><p><span class="signed-in-name">{{ current_user.full_name }}</span>, performance figures below are calculated from your saved practice sessions and answer reviews.</p></div>
         <div class="progress-metrics"><article><span id="progress-attempted">0</span><small>ANSWERS REVIEWED</small></article><article><span id="progress-accuracy">—</span><small>ACCURACY</small></article><article><span id="progress-completed">0</span><small>COMPLETED SESSIONS</small></article></div>
         <section class="content-section"><div class="section-heading"><div><h3>Topic performance</h3><p>Intentional retries are excluded from these topic totals.</p></div></div><div id="topic-performance"><p class="empty-state">No reviewed topic data yet.</p></div></section>
         <section class="content-section"><div class="section-heading"><div><h3>Recent activity</h3><p>Saved practice sessions; no historical trend is inferred from insufficient data.</p></div></div><div id="progress-activity"><p class="empty-state">No practice sessions saved yet.</p></div></section>
-        <section class="content-section planner-section"><div class="section-heading"><div><span class="eyebrow">DAILY PLANNER</span><h3>Plan your next study block</h3><p>Checklist status is saved in this browser, not in the workbook.</p></div><button class="text-action" id="reset-planner" type="button">Reset today's checklist</button></div><div class="planner-list"><label><input type="checkbox" data-planner-task="practice"><span>Practise interview questions</span></label><label><input type="checkbox" data-planner-task="review"><span>Review incorrect answers</span></label><label><input type="checkbox" data-planner-task="weak-topic"><span>Study a topic that needs more practice</span></label><label><input type="checkbox" data-planner-task="mock"><span>Complete a mock interview practice</span></label></div></section>
+        <section class="content-section planner-section"><div class="section-heading"><div><span class="eyebrow">DAILY PLANNER</span><h3>Plan your next study block</h3><p>Checklist status is saved to your account for today.</p></div><button class="text-action" id="reset-planner" type="button">Reset today's checklist</button></div><div class="planner-list"><label><input type="checkbox" data-planner-task="practice"><span>Practise interview questions</span></label><label><input type="checkbox" data-planner-task="review"><span>Review incorrect answers</span></label><label><input type="checkbox" data-planner-task="weak-topic"><span>Study a topic that needs more practice</span></label><label><input type="checkbox" data-planner-task="mock"><span>Complete a mock interview practice</span></label></div></section>
       </section>
 
       <section class="app-page" id="page-experiences" hidden>
@@ -180,16 +190,6 @@
         <section class="content-section"><div class="section-heading"><div><h3>Available practice instead</h3><p>Use curated technical and behavioural questions while experience submissions are unavailable.</p></div></div><button class="resource-link" type="button" data-view-link="hub">Browse the Prep Hub <span>→</span></button></section>
       </section>
 
-      <section class="app-page" id="page-resources" hidden>
-        <div class="page-intro"><span class="eyebrow">PRACTICAL GUIDANCE</span><h3>Community &amp; Resources</h3><p>A focused resource library for preparation. Community posting features are not currently supported.</p></div>
-        <div class="resource-grid">
-          <article class="resource-card"><span class="eyebrow">PRACTICE</span><h4>Use a clear answer structure</h4><p>Explain the situation, your reasoning, the action you took, and the result. Keep examples specific and distinguish your contribution from the team's.</p></article>
-          <article class="resource-card"><span class="eyebrow">TECHNICAL</span><h4>Make your trade-offs explicit</h4><p>Clarify requirements, compare options, call out risks, and describe how you would verify the result.</p></article>
-          <article class="resource-card"><span class="eyebrow">REFLECTION</span><h4>Review the explanation, not just the score</h4><p>Use answer explanations to identify a next learning step. Scores describe this practice session, not a guaranteed hiring outcome.</p></article>
-          <article class="resource-card"><span class="eyebrow">FAQ</span><h4>Where is my practice data stored?</h4><p>Session answers are saved in the configured local Excel workbook. Planner and roadmap checkmarks are stored in this browser only.</p></article>
-        </div>
-        <button class="resource-link" type="button" data-view-link="practice">Start a practice session <span>→</span></button>
-      </section>
     </section>
   </main>
   <div class="toast" id="toast" role="status"></div>
