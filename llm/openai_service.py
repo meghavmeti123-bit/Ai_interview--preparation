@@ -17,14 +17,14 @@ _QUESTION_SCHEMA = {
         "schema": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["question", "interview_category", "focus_area", "difficulty", "question_type", "format", "concept_id", "scenario_id", "follow_up_to_question_id", "expected_answer", "explanation", "evaluation_criteria", "tags", "options", "correct_option"],
+            "required": ["question", "interview_category", "focus_area", "difficulty", "question_type", "format", "concept_id", "scenario_id", "follow_up_to_question_id", "expected_answer", "explanation", "evaluation_criteria", "tags", "options", "option_explanations", "correct_option"],
             "properties": {
                 "question": {"type": "string"},
                 "interview_category": {"type": "string", "enum": ["Technical", "Situational", "Behavioral", "System design"]},
                 "focus_area": {"type": "string"},
                 "difficulty": {"type": "string", "enum": ["Entry", "Intermediate", "Advanced"]},
                 "question_type": {"type": "string", "enum": ["Troubleshooting", "Scenario", "Decision making", "System design", "Behavioral", "Multiple choice", "Follow-up"]},
-                "format": {"type": "string", "enum": ["open_ended", "multiple_choice"]},
+                "format": {"type": "string", "enum": ["multiple_choice"]},
                 "concept_id": {"type": "string"},
                 "scenario_id": {"type": "string"},
                 "follow_up_to_question_id": {"type": "string"},
@@ -36,7 +36,11 @@ _QUESTION_SCHEMA = {
                     "type": "object", "additionalProperties": False, "required": ["A", "B", "C", "D"],
                     "properties": {key: {"type": "string"} for key in ("A", "B", "C", "D")},
                 },
-                "correct_option": {"type": "string", "enum": ["", "A", "B", "C", "D"]},
+                "option_explanations": {
+                    "type": "object", "additionalProperties": False, "required": ["A", "B", "C", "D"],
+                    "properties": {key: {"type": "string"} for key in ("A", "B", "C", "D")},
+                },
+                "correct_option": {"type": "string", "enum": ["A", "B", "C", "D"]},
             },
         },
     },
@@ -80,17 +84,14 @@ def generate_question(
     focus_area: str,
 ) -> dict[str, Any]:
     family = question_engine.role_family(setup["role"])
-    type_instruction = (
-        "Write an open-ended interview prompt that asks the candidate to explain an investigation, decision, or trade-off. Do not make it multiple choice."
-        if requested_format == "open_ended"
-        else "Write a foundational multiple-choice question with exactly one defensible best answer and three plausible but clearly inferior alternatives."
-    )
+    type_instruction = "Write one single-answer multiple-choice interview question with four plausible options."
     system_prompt = (
         "You are a senior technical interviewer. Produce a realistic job-specific interview question using the supplied context. "
         "Prefer concrete production constraints, diagnostic evidence, prioritization, reliability, security, and engineering trade-offs. "
         "Do not add the job title to a generic prompt to simulate personalization. Do not reuse or paraphrase any prior scenario, concept, or question. "
-        f"{type_instruction} Match the candidate experience. For open_ended, use empty strings for options A-D and correct_option. "
-        "For multiple_choice, include four plausible options and an internally consistent answer key. For a Follow-up, build on the most recent candidate answer, "
+        f"{type_instruction} Match the candidate experience. Include one best answer, three plausible distractors based on realistic trade-offs or common mistakes, "
+        "and a specific explanation for why each of the four options is or is not the best. Keep option lengths and specificity balanced. "
+        "For a Follow-up, build on the most recent candidate answer, "
         "introduce a material new constraint, and ask how the approach changes; do not repeat the original question. Return only the required schema."
     )
     prompt_data = {
@@ -124,17 +125,6 @@ def generate_question(
             "focus_area": focus_area,
             "source": "openai",
         }
-        if requested_format == "open_ended":
-            raw_options = question.get("options", {})
-            if (
-                not isinstance(raw_options, dict)
-                or any(str(value).strip() for value in raw_options.values())
-                or question.get("correct_option")
-            ):
-                last_error = ValueError("Open-ended question unexpectedly included answer choices.")
-                continue
-            question["options"] = {}
-            question["correct_option"] = ""
         if question.get("format") != requested_format or question.get("question_type") != requested_type:
             last_error = ValueError("The AI returned the wrong question type or format.")
             prompt_data["requested_format"] = requested_format

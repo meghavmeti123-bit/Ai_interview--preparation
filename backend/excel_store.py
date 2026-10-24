@@ -12,12 +12,12 @@ from openpyxl import Workbook, load_workbook
 
 _LOCK = threading.RLock()
 _HEADERS = {
-    "Sessions": ["session_id", "created_at", "role", "experience", "interview_type", "focus_areas"],
+    "Sessions": ["session_id", "created_at", "role", "experience", "interview_type", "focus_areas", "question_count"],
     "Practice": [
         "question_id", "session_id", "created_at", "focus_area", "question", "sample_answer",
         "options_json", "correct_option", "explanation", "round_number", "role", "role_family",
         "experience_level", "interview_category", "difficulty", "question_type", "format", "concept_id",
-        "scenario_id", "expected_answer", "evaluation_criteria_json", "tags_json", "source",
+        "scenario_id", "bank_question_id", "expected_answer", "evaluation_criteria_json", "tags_json", "option_explanations_json", "source",
         "intentional_retry", "retry_of_question_id", "follow_up_to_question_id",
     ],
     "Reviews": [
@@ -63,14 +63,19 @@ def _records(sheet) -> list[dict[str, Any]]:
     return [dict(zip(headers, row)) for row in rows if any(value is not None for value in row)]
 
 
-def create_session(path: Path, setup: dict[str, Any]) -> str:
+def create_session(path: Path, setup: dict[str, Any], question_count: int = 5) -> str:
     with _LOCK:
         workbook = _open(Path(path))
         session_id = str(uuid.uuid4())
-        workbook["Sessions"].append([
-            session_id, _timestamp(), setup["role"], setup["experience"],
-            setup["interview_type"], ", ".join(setup["focus_areas"]),
-        ])
+        _append_record(workbook["Sessions"], {
+            "session_id": session_id,
+            "created_at": _timestamp(),
+            "role": setup["role"],
+            "experience": setup["experience"],
+            "interview_type": setup["interview_type"],
+            "focus_areas": ", ".join(setup["focus_areas"]),
+            "question_count": question_count,
+        })
         workbook.save(path)
         return session_id
 
@@ -116,9 +121,11 @@ def add_practice(
             "format": practice.get("format", "multiple_choice"),
             "concept_id": practice.get("concept_id", ""),
             "scenario_id": practice.get("scenario_id", ""),
+            "bank_question_id": practice.get("question_id", ""),
             "expected_answer": practice.get("expected_answer", ""),
             "evaluation_criteria_json": json.dumps(practice.get("evaluation_criteria", [])),
             "tags_json": json.dumps(practice.get("tags", [])),
+            "option_explanations_json": json.dumps(practice.get("option_explanations", {})),
             "source": practice.get("source", ""),
             "intentional_retry": intentional_retry,
             "retry_of_question_id": retry_of_question_id,
@@ -171,3 +178,44 @@ def get_session(path: Path, session_id: str) -> dict[str, Any] | None:
         practice = [row for row in _records(workbook["Practice"]) if row["session_id"] == session_id]
         reviews = [row for row in _records(workbook["Reviews"]) if row["session_id"] == session_id]
         return {"session": session, "practice": practice, "reviews": reviews}
+
+
+def get_dashboard_summary(path: Path, limit: int = 5) -> dict[str, Any]:
+    with _LOCK:
+        workbook = _open(Path(path))
+        sessions = sorted(_records(workbook["Sessions"]), key=lambda row: str(row.get("created_at") or ""), reverse=True)
+        practice_rows = _records(workbook["Practice"])
+        review_rows = _records(workbook["Reviews"])
+        reviews_by_session: dict[str, list[dict[str, Any]]] = {}
+        for review in review_rows:
+            reviews_by_session.setdefault(str(review["session_id"]), []).append(review)
+        attempted = len(review_rows)
+        correct = sum(_as_bool(row.get("is_correct")) for row in review_rows)
+        recent = []
+        for session in sessions[:max(0, limit)]:
+            session_id = str(session["session_id"])
+            session_reviews = reviews_by_session.get(session_id, [])
+            session_attempted = len(session_reviews)
+            session_correct = sum(_as_bool(row.get("is_correct")) for row in session_reviews)
+            recent.append({
+                "session_id": session_id,
+                "role": session.get("role", "Interview practice"),
+                "experience": session.get("experience", ""),
+                "created_at": session.get("created_at", ""),
+                "requested_question_count": int(session.get("question_count") or 0),
+                "attempted_count": session_attempted,
+                "accuracy": round(100 * session_correct / session_attempted) if session_attempted else None,
+            })
+        return {
+            "session_count": len(sessions),
+            "question_count": len(practice_rows),
+            "attempted_count": attempted,
+            "accuracy": round(100 * correct / attempted) if attempted else None,
+            "recent_sessions": recent,
+        }
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().casefold() in {"1", "true", "yes", "y"}

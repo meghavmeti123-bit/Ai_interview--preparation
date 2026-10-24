@@ -15,12 +15,21 @@ from llm import openai_service
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
     if overrides:
         app.config.update(overrides)
 
     @app.get("/")
     def index():
-        return render_template("index.html", demo_mode=not bool(app.config["OPENAI_API_KEY"]))
+        return render_template(
+            "index.html",
+            demo_mode=not bool(app.config["OPENAI_API_KEY"]),
+            max_question_count=app.config["MAX_QUESTION_COUNT"],
+        )
+
+    @app.get("/api/dashboard")
+    def dashboard():
+        return jsonify(excel_store.get_dashboard_summary(app.config["EXCEL_PATH"]))
 
     @app.post("/api/sessions")
     def start_session():
@@ -29,11 +38,45 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         experience = str(payload.get("experience", "")).strip()
         interview_type = str(payload.get("interview_type", "")).strip()
         focus_areas = payload.get("focus_areas")
-        if not role or not experience or not interview_type or not isinstance(focus_areas, list) or not focus_areas:
+        raw_count = payload.get("question_count")
+        count_text = str(raw_count if raw_count is not None else "").strip()
+        if isinstance(raw_count, bool) or not count_text.isdecimal() or len(count_text) > 9:
+            return jsonify(error="Enter a whole number of questions greater than zero."), 400
+        question_count = int(count_text)
+        max_question_count = int(app.config["MAX_QUESTION_COUNT"])
+        if question_count < 1 or question_count > max_question_count:
+            return jsonify(error=f"Choose between 1 and {max_question_count} questions. This configurable limit protects the service from oversized requests."), 400
+        if not role or not experience or not interview_type or not isinstance(focus_areas, list):
             return jsonify(error="Choose a role, experience level, interview type, and at least one focus area."), 400
-        setup = {"role": role[:100], "experience": experience, "interview_type": interview_type, "focus_areas": [str(item)[:60] for item in focus_areas[:8]]}
-        session_id = excel_store.create_session(app.config["EXCEL_PATH"], setup)
-        return jsonify(session_id=session_id, setup=setup)
+        clean_focus = list(dict.fromkeys(str(item).strip()[:60] for item in focus_areas if str(item).strip()))[:12]
+        if not clean_focus:
+            return jsonify(error="Choose at least one valid focus area."), 400
+        setup = {"role": role[:100], "experience": experience, "interview_type": interview_type, "focus_areas": clean_focus}
+        available_count = question_engine.count_available_questions(setup, [])
+        if not app.config["OPENAI_API_KEY"] and question_count > available_count:
+            return jsonify(
+                error=f"Only {available_count} unseen MCQs are available for this role and focus selection in demo mode. Reduce the count or configure OpenAI question generation.",
+                available_question_count=available_count,
+                ai_generation_available=False,
+            ), 422
+        session_id = excel_store.create_session(app.config["EXCEL_PATH"], setup, question_count)
+        return jsonify(session_id=session_id, setup=setup, question_count=question_count, available_question_count=available_count)
+
+    @app.post("/api/question-capacity")
+    def question_capacity():
+        payload = request.get_json(silent=True) or {}
+        role = str(payload.get("role", "")).strip()
+        experience = str(payload.get("experience", "")).strip()
+        interview_type = str(payload.get("interview_type", "")).strip()
+        focus_areas = payload.get("focus_areas")
+        if not role or not experience or not interview_type or not isinstance(focus_areas, list):
+            return jsonify(error="Complete the role, experience, interview type, and focus areas to check availability."), 400
+        setup = {"role": role[:100], "experience": experience, "interview_type": interview_type, "focus_areas": [str(item)[:60] for item in focus_areas[:12]]}
+        return jsonify(
+            available_question_count=question_engine.count_available_questions(setup, []),
+            ai_generation_available=bool(app.config["OPENAI_API_KEY"]),
+            max_question_count=int(app.config["MAX_QUESTION_COUNT"]),
+        )
 
     @app.post("/api/sessions/<session_id>/practice")
     def create_practice(session_id: str):
@@ -45,17 +88,27 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         if round_number is None:
             return jsonify(error="Round number must be a positive integer."), 400
         round_practice = [row for row in data["practice"] if int(row.get("round_number") or 1) == round_number]
-        if len(round_practice) >= 5:
-            return jsonify(error="This five-question round is complete."), 409
+        question_count = int(data["session"].get("question_count") or 5)
+        base_round_practice = [row for row in round_practice if not bool(row.get("intentional_retry"))]
+        if len(base_round_practice) >= question_count:
+            return jsonify(error="This practice session is complete."), 409
         setup = _setup_from_row(data["session"])
         requested_focus = payload.get("focus_areas")
         if isinstance(requested_focus, list):
-            selected_focus = [area for area in requested_focus if area in setup["focus_areas"]]
+            selected_focus = [
+                str(area) for area in requested_focus
+                if str(area) in setup["focus_areas"]
+                or question_engine.matches_focus(str(area), set(setup["focus_areas"]))
+            ]
             if selected_focus:
                 setup["focus_areas"] = selected_focus
-        question_number = len(round_practice) + 1
+        question_number = len(base_round_practice) + 1
         setup["focus_areas"] = [str(area) for area in setup["focus_areas"]]
-        focus_pool = [str(area) for area in requested_focus if area in setup["focus_areas"]] if isinstance(requested_focus, list) else []
+        focus_pool = [
+            str(area) for area in requested_focus
+            if str(area) in setup["focus_areas"]
+            or question_engine.matches_focus(str(area), set(setup["focus_areas"]))
+        ] if isinstance(requested_focus, list) else []
         if focus_pool:
             setup["focus_areas"] = focus_pool
         focus_area = random.choice(setup["focus_areas"])
@@ -82,7 +135,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         if practice is None:
             practice = question_engine.select_bank_question(setup, history, question_number)
         if practice is None:
-            return jsonify(error="No unseen questions remain for this role and setup. Start a new session or choose different focus areas."), 409
+            remaining = question_engine.count_available_questions(setup, history)
+            return jsonify(error=f"No unseen questions remain for this role and setup. {remaining} unique curated MCQs remain; reduce the requested count or configure OpenAI generation."), 409
         if question_engine.is_duplicate(practice, history):
             practice = question_engine.select_bank_question(setup, history, question_number)
         if practice is None:
@@ -91,7 +145,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             question_id = excel_store.add_practice(app.config["EXCEL_PATH"], session_id, practice, round_number)
         except ValueError:
             return jsonify(error="A duplicate question was detected. Request another question."), 409
-        return jsonify(question_id=question_id, **_public_question(practice))
+        return jsonify(question_id=question_id, question_number=question_number, question_count=question_count, **_public_question(practice))
 
     @app.post("/api/sessions/<session_id>/retry")
     def retry_question(session_id: str):
@@ -150,6 +204,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 "is_correct": is_correct,
                 "score": 100 if is_correct else 0,
                 "explanation": str(question["explanation"]),
+                "option_explanations": question["option_explanations"],
                 "feedback": str(question["explanation"]),
                 "focus_area": str(question["focus_area"]),
                 "format": question["format"],
@@ -212,7 +267,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             review = review_by_question.get(practice["question_id"])
             if not review:
                 continue
-            is_correct = bool(review["is_correct"])
+            is_correct = _as_bool(review["is_correct"])
             area = str(practice["focus_area"])
             focus_summary.setdefault(area, {"correct": 0, "total": 0})
             focus_summary[area]["total"] += 1
@@ -222,6 +277,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 "question": practice["question"],
                 "focus_area": area,
                 "options": json.loads(practice.get("options_json") or "{}"),
+                "option_explanations": json.loads(practice.get("option_explanations_json") or "{}"),
                 "format": practice.get("format") or "multiple_choice",
                 "question_type": practice.get("question_type") or "Multiple choice",
                 "selected_option": review["selected_option"],
@@ -241,6 +297,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         ]
         improvement_areas = [item["focus_area"] for item in focus_stats if item["correct"] < item["total"]]
         correct_count = sum(item["is_correct"] for item in items)
+        session_question_count = int(data["session"].get("question_count") or len(practice_rows))
         feedback = openai_service.demo_summary(correct_count, len(items), focus_stats)
         if app.config["OPENAI_API_KEY"] and items:
             try:
@@ -254,10 +311,13 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             setup=_setup_from_row(data["session"]),
             round_number=round_number,
             question_count=len(practice_rows),
+            requested_question_count=session_question_count,
             review_count=len(reviews),
             correct_count=correct_count,
             incorrect_count=len(items) - correct_count,
-            score_total=5,
+            attempted_count=len(items),
+            accuracy=round(100 * correct_count / len(items)) if items else 0,
+            score_total=session_question_count,
             items=items,
             focus_stats=focus_stats,
             improvement_areas=improvement_areas,
@@ -274,6 +334,12 @@ def _round_number(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return round_number if round_number > 0 else None
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().casefold() in {"1", "true", "yes", "y"}
 
 
 def _public_question(question: dict[str, Any]) -> dict[str, Any]:
@@ -302,12 +368,14 @@ def _practice_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "format": row.get("format") or "multiple_choice",
         "concept_id": row.get("concept_id", ""),
         "scenario_id": row.get("scenario_id", ""),
+        "bank_question_id": row.get("bank_question_id", ""),
         "expected_answer": row.get("expected_answer") or row.get("sample_answer", ""),
         "explanation": row.get("explanation", ""),
         "evaluation_criteria": json.loads(row.get("evaluation_criteria_json") or "[]"),
         "tags": json.loads(row.get("tags_json") or "[]"),
         "source": row.get("source", "legacy"),
         "options": json.loads(row.get("options_json") or "{}"),
+        "option_explanations": json.loads(row.get("option_explanations_json") or "{}"),
         "correct_option": row.get("correct_option", ""),
         "intentional_retry": bool(row.get("intentional_retry", False)),
     }
