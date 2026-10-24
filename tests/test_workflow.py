@@ -40,10 +40,55 @@ class InterviewWorkflowTests(unittest.TestCase):
 
     def test_brand_and_capacity_endpoint(self) -> None:
         page = self.client.get("/")
-        self.assertIn(b"Interview Ready AI", page.data)
+        self.assertIn(b"InterviewReady AI", page.data)
+        for page_name in (b"Prep Hub", b"Learning Roadmap", b"Mock Interviews", b"Progress Tracker", b"Interview Experiences"):
+            self.assertIn(page_name, page.data)
+        self.assertNotIn(b"Upgrade to", page.data)
         capacity = self.client.post("/api/question-capacity", json=self.setup)
         self.assertEqual(capacity.status_code, 200)
         self.assertGreater(capacity.get_json()["available_question_count"], 0)
+
+    def test_topic_availability_comes_from_question_bank(self) -> None:
+        response = self.client.get("/api/topics")
+        self.assertEqual(response.status_code, 200)
+        topics = response.get_json()["topics"]
+        self.assertTrue(all(isinstance(item["available_question_count"], int) for item in topics))
+        self.assertTrue(any(item["available_question_count"] > 0 for item in topics))
+
+    def test_topic_progress_does_not_double_count_intentional_retries(self) -> None:
+        session_id = self.create_session(question_count=1)
+        question = self.client.post(
+            f"/api/sessions/{session_id}/practice",
+            json={"round_number": 1},
+        ).get_json()
+        session = excel_store.get_session(self.workbook_path, session_id)
+        record = next(row for row in session["practice"] if row["question_id"] == question["question_id"])
+        incorrect_option = next(option for option in "ABCD" if option != record["correct_option"])
+        self.client.post(
+            f"/api/sessions/{session_id}/reviews",
+            json={
+                "question_id": question["question_id"],
+                "selected_option": incorrect_option,
+                "round_number": 1,
+            },
+        )
+        retry = self.client.post(
+            f"/api/sessions/{session_id}/retry",
+            json={"question_id": question["question_id"], "round_number": 1},
+        )
+        self.assertEqual(retry.status_code, 200, retry.get_json())
+        self.client.post(
+            f"/api/sessions/{session_id}/reviews",
+            json={
+                "question_id": retry.get_json()["question_id"],
+                "selected_option": record["correct_option"],
+                "round_number": 1,
+            },
+        )
+
+        dashboard = self.client.get("/api/dashboard").get_json()
+        self.assertEqual(sum(topic["total"] for topic in dashboard["topic_stats"]), 1)
+        self.assertEqual(dashboard["completed_session_count"], 1)
 
     def test_dashboard_metrics_use_saved_workbook_answers(self) -> None:
         empty = self.client.get("/api/dashboard").get_json()
@@ -66,6 +111,9 @@ class InterviewWorkflowTests(unittest.TestCase):
         self.assertEqual(dashboard["session_count"], 1)
         self.assertEqual(dashboard["attempted_count"], 1)
         self.assertEqual(dashboard["accuracy"], 100)
+        self.assertEqual(dashboard["completed_session_count"], 1)
+        self.assertEqual(sum(topic["total"] for topic in dashboard["topic_stats"]), 1)
+        self.assertEqual(sum(topic["correct"] for topic in dashboard["topic_stats"]), 1)
         self.assertEqual(dashboard["recent_sessions"][0]["role"], self.setup["role"])
 
     def test_invalid_counts_and_custom_counts_over_twenty(self) -> None:

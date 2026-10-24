@@ -3,28 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#102c28">
+  <meta name="theme-color" content="#101012">
   <meta name="description" content="Personalized, role-specific interview practice with clear answer feedback and readiness results.">
-  <title>Interview Ready AI</title>
+  <title>InterviewReady AI | Interview Preparation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='quiz.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='engine.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='premium.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
-  <script defer src="{{ url_for('static', filename='app.js', v='setup-recovery-2') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='redesign.css') }}">
+  <script defer src="{{ url_for('static', filename='app.js', v='dark-dashboard-1') }}"></script>
 </head>
 <body data-demo-mode="{{ 'true' if demo_mode else 'false' }}" data-max-question-count="{{ max_question_count }}">
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Interview Ready AI home"><span class="brand-mark">IR</span><span>interview ready<span class="brand-period">.ai</span></span></a>
+    <a class="brand" href="/" aria-label="InterviewReady AI dashboard" data-home-link><span class="brand-mark">IR</span><span>InterviewReady<span class="brand-period"> AI</span></span></a>
     <div class="topbar-right"><span class="privacy-note"><span class="status-dot"></span>Private practice space</span><span class="mode-pill" id="mode-pill">{{ 'DEMO MODE' if demo_mode else 'AI COACH' }}</span></div>
   </header>
 
   <main class="layout">
     <aside class="sidebar">
-      <div class="sidebar-intro"><span class="eyebrow">YOUR INTERVIEW WORKSPACE</span><h1>Show how<br>you think.</h1><p>Role-specific practice built around realistic engineering decisions.</p></div>
+      <div class="sidebar-intro"><span class="eyebrow">YOUR INTERVIEW WORKSPACE</span><h1>Prepare smarter.<br>Interview better.</h1><p>Build confidence with focused practice and honest feedback.</p></div>
+      <nav class="primary-nav" aria-label="Main navigation">
+        <button class="primary-link active" data-view-link="dashboard" type="button"><span class="nav-symbol">⌂</span>Dashboard</button>
+        <button class="primary-link" data-view-link="hub" type="button"><span class="nav-symbol">◈</span>Prep Hub</button>
+        <button class="primary-link" data-view-link="practice" type="button"><span class="nav-symbol">◉</span>Practice</button>
+        <button class="primary-link" data-view-link="roadmap" type="button"><span class="nav-symbol">▤</span>Learning Roadmap</button>
+        <button class="primary-link" data-view-link="mock" type="button"><span class="nav-symbol">◎</span>Mock Interviews</button>
+        <button class="primary-link" data-view-link="progress" type="button"><span class="nav-symbol">↗</span>Progress Tracker</button>
+        <button class="primary-link" data-view-link="experiences" type="button"><span class="nav-symbol">◷</span>Interview Experiences</button>
+        <button class="primary-link" data-view-link="resources" type="button"><span class="nav-symbol">▧</span>Resources</button>
+      </nav>
       <nav class="stage-nav" aria-label="Interview practice stages">
         <button class="stage-link active" data-stage="setup" type="button"><span class="stage-number">01</span><span>Set up</span><span class="stage-state">NOW</span></button>
         <button class="stage-link" data-stage="practice" type="button" disabled><span class="stage-number">02</span><span>Practice</span></button>
@@ -34,15 +44,35 @@
       <div class="sidebar-foot"><span class="foot-rule"></span><p>Good interviews aren't memorized.<br>They're understood.</p><span class="foot-index">PANEL BRIEF 01</span></div>
     </aside>
 
-    <section class="workspace" aria-live="polite">
-      <div class="workspace-head"><div><span class="eyebrow" id="stage-kicker">STEP 01 / SET UP</span><h2 id="page-title">Build your practice</h2></div><div class="workspace-tools"><span class="session-count" id="session-count">NO SESSION YET</span><button class="button button-light stage-back" id="stage-back" type="button" hidden>← Back</button></div></div>
+    <section class="workspace" data-view="dashboard">
+      <div class="workspace-head"><div><span class="eyebrow" id="stage-kicker">YOUR PREPARATION SPACE</span><h2 id="page-title">Dashboard</h2></div><div class="workspace-tools"><span class="session-count" id="session-count">READY WHEN YOU ARE</span><button class="button button-light stage-back" id="stage-back" type="button" hidden>← Back</button></div></div>
 
-      <section class="stage-panel visible" id="panel-setup">
-        <section class="home-dashboard" aria-label="Interview Ready AI dashboard">
-          <div class="dashboard-welcome"><span class="eyebrow">INTERVIEW READY AI</span><h3>Walk into your next interview<br>with a clearer point of view.</h3><p>Practice real engineering decisions, sharpen your reasoning, and see where to focus next.</p><button class="button button-dark" id="start-practice" type="button"><span>Start Practice</span><span aria-hidden="true">→</span></button></div>
+      <section class="app-page" id="page-dashboard">
+        <section class="home-dashboard" aria-label="InterviewReady AI dashboard">
+          <div class="dashboard-welcome"><span class="eyebrow">YOUR NEXT STEP STARTS HERE</span><h3>Prepare Smarter.<br>Interview Better.</h3><p>Discover your strengths, practise real interview questions, and improve your readiness with focused feedback.</p><div class="welcome-actions"><button class="button button-dark" id="start-practice" type="button">Start Practising <span aria-hidden="true">→</span></button><button class="button button-light" type="button" data-view-link="hub">Explore Preparation Topics</button></div></div>
           <div class="dashboard-stats"><div><span id="dashboard-sessions">0</span><small>SESSIONS</small></div><div><span id="dashboard-attempted">0</span><small>ANSWERS CHECKED</small></div><div><span id="dashboard-accuracy">—</span><small>OVERALL ACCURACY</small></div></div>
-          <div class="recent-sessions"><div class="recent-heading"><span class="field-label">RECENT PRACTICE</span><span id="recent-count">NO HISTORY</span></div><div id="recent-session-list"><p class="dashboard-empty">Your practice sessions will show up here.</p></div></div>
+          <div class="recent-sessions"><div class="recent-heading"><span class="field-label">RECENT PRACTICE</span><span id="recent-count">NO HISTORY</span></div><div id="recent-session-list"><p class="dashboard-empty">Your preparation journey starts here.</p></div></div>
         </section>
+        <section class="content-section">
+          <div class="section-heading"><div><span class="eyebrow">LEARN WITH INTENTION</span><h3>Explore popular topics</h3><p>Counts use the default Software Engineer setup; final availability is checked before practice.</p></div><button class="text-action" type="button" data-view-link="hub">View all topics <span aria-hidden="true">→</span></button></div>
+          <div class="topic-grid" id="dashboard-topics">
+            <article class="topic-card" data-topic-name="HR Interview Questions" data-topic-focus="Communication"><span class="topic-icon">✦</span><h4>HR Interview Questions</h4><p>Communication, collaboration, and people-focused scenarios.</p><span class="topic-count" data-count-focus="Communication">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Technical Interview Questions" data-topic-focus="Technical depth"><span class="topic-icon">⌘</span><h4>Technical Interview Questions</h4><p>Engineering decisions, trade-offs, and technical reasoning.</p><span class="topic-count" data-count-focus="Technical depth">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Programming Fundamentals" data-topic-focus="Problem solving"><span class="topic-icon">{ }</span><h4>Programming Fundamentals</h4><p>Work through problem-solving questions from the available bank.</p><span class="topic-count" data-count-focus="Problem solving">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Data Structures and Algorithms"><span class="topic-icon">⌁</span><h4>Data Structures &amp; Algorithms</h4><p>Dedicated DSA questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Object-Oriented Programming"><span class="topic-icon">◫</span><h4>Object-Oriented Programming</h4><p>Dedicated OOP questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Database Management Systems"><span class="topic-icon">▤</span><h4>Database Management Systems</h4><p>Dedicated DBMS questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Operating Systems"><span class="topic-icon">◧</span><h4>Operating Systems</h4><p>Dedicated operating-system questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Computer Networks"><span class="topic-icon">⌘</span><h4>Computer Networks</h4><p>Dedicated networking questions are not currently in the curated bank.</p><span class="topic-count is-muted">No matching questions yet</span><button type="button" class="topic-action" data-topic-unavailable>View topic status <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Coding and Problem-Solving" data-topic-focus="Problem solving"><span class="topic-icon">↗</span><h4>Coding &amp; Problem-Solving</h4><p>Practise clear problem analysis with existing engineering scenarios.</p><span class="topic-count" data-count-focus="Problem solving">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
+            <article class="topic-card" data-topic-name="Communication Skills" data-topic-focus="Communication"><span class="topic-icon">◌</span><h4>Communication Skills</h4><p>Strengthen how you explain decisions and collaborate.</p><span class="topic-count" data-count-focus="Communication">Checking availability…</span><button type="button" class="topic-action" data-topic-practice>Explore topic <span aria-hidden="true">→</span></button></article>
+          </div>
+        </section>
+        <section class="resource-strip"><div><span class="eyebrow">KEEP BUILDING MOMENTUM</span><h3>Choose a useful next step</h3></div><button type="button" class="resource-link" data-view-link="roadmap">Follow the learning roadmap <span>→</span></button><button type="button" class="resource-link" data-view-link="progress">Review your progress <span>→</span></button><button type="button" class="resource-link" data-view-link="mock">Set up a mock interview <span>→</span></button></section>
+      </section>
+
+      <section class="app-page" id="page-practice" hidden>
+      <section class="stage-panel visible" id="panel-setup">
         <p class="section-lede">Tune your interview round. Questions adapt to your role, experience, and areas of focus.</p>
         <form id="setup-form">
           <label class="field-label" for="role">ROLE OR JOB TITLE</label>
@@ -105,6 +135,60 @@
         <div class="stat-strip"><div><span class="stat-number" id="stat-score">0 / 5</span><span class="stat-label">CORRECT</span></div><div><span class="stat-number" id="stat-round">01</span><span class="stat-label">ROUND</span></div><div><span class="stat-number" id="stat-improvements">0</span><span class="stat-label">AREAS TO REVIEW</span></div></div>
         <div class="reset-focus"><span class="field-label">NEXT ROUND FOCUS</span><div id="retry-focus-list"></div></div>
         <div class="reset-actions"><button class="button button-dark" id="reset-practice" type="button"><span>Practice again</span><span aria-hidden="true">↻</span></button><button class="button button-light" id="edit-setup" type="button">Start over</button></div>
+      </section>
+      </section>
+
+      <section class="app-page" id="page-hub" hidden>
+        <div class="page-intro"><span class="eyebrow">PREPARATION LIBRARY</span><h3>Prep Hub</h3><p>Explore what the current question bank supports. Topics without matching questions are clearly identified.</p></div>
+        <label class="search-field" for="topic-search"><span aria-hidden="true">⌕</span><input id="topic-search" type="search" placeholder="Search preparation topics" autocomplete="off"></label>
+        <div class="topic-grid" id="hub-topics"></div>
+        <p class="empty-state" id="hub-empty" hidden>No topics match that search.</p>
+      </section>
+
+      <section class="app-page" id="page-roadmap" hidden>
+        <div class="page-intro"><span class="eyebrow">A STRUCTURED PATH</span><h3>Learning Roadmap</h3><p>An original interview-preparation progression inspired by topic-based learning. This is not a reproduction of any external course.</p></div>
+        <div class="roadmap-progress"><div><strong id="roadmap-completed">0</strong><span>topics marked complete by you</span></div><div class="mini-progress"><span id="roadmap-progress-fill"></span></div></div>
+        <details class="roadmap-module" open><summary><span>01</span> Interview Fundamentals</summary><div class="roadmap-topics"><article data-roadmap-id="interview-basics"><div><h4>Interview preparation basics</h4><p>Set a role target, plan focused practice, and review gaps.</p></div><button type="button" data-roadmap-complete="interview-basics">Mark complete</button></article><article data-roadmap-id="resume"><div><h4>Resume-based questions</h4><p>Prepare clear explanations of your work and impact.</p></div><button type="button" data-roadmap-complete="resume">Mark complete</button></article><article data-roadmap-id="self-introduction"><div><h4>Self-introduction</h4><p>Build a concise introduction that connects experience to the role.</p></div><button type="button" data-roadmap-complete="self-introduction">Mark complete</button></article><article data-roadmap-id="communication"><div><h4>Communication and HR preparation</h4><p>Use structured examples and communicate trade-offs clearly.</p><button type="button" data-roadmap-practice="Communication">Practise topic</button></div><button type="button" data-roadmap-complete="communication">Mark complete</button></article></div></details>
+        <details class="roadmap-module"><summary><span>02</span> Programming Fundamentals</summary><div class="roadmap-topics"><article data-roadmap-id="variables"><div><h4>Variables and data types</h4><p>Review representation, types, and safe value handling.</p></div><button type="button" data-roadmap-complete="variables">Mark complete</button></article><article data-roadmap-id="conditions-loops"><div><h4>Conditions and loops</h4><p>Practise control flow, edge cases, and readable iteration.</p></div><button type="button" data-roadmap-complete="conditions-loops">Mark complete</button></article><article data-roadmap-id="functions"><div><h4>Functions and problem-solving</h4><p>Break down a problem into testable, reusable steps.</p><button type="button" data-roadmap-practice="Problem solving">Practise available questions</button><button type="button" data-roadmap-complete="functions">Mark complete</button></article></div></details>
+        <details class="roadmap-module"><summary><span>03</span> Data Structures and Algorithms</summary><div class="roadmap-topics"><article data-roadmap-id="arrays-strings"><div><h4>Arrays and strings</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="arrays-strings">Mark overview complete</button></article><article data-roadmap-id="search-sort"><div><h4>Searching and sorting</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="search-sort">Mark overview complete</button></article><article data-roadmap-id="hashing-lists"><div><h4>Hashing and linked lists</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="hashing-lists">Mark overview complete</button></article><article data-roadmap-id="stacks-recursion"><div><h4>Stacks, queues, and recursion</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="stacks-recursion">Mark overview complete</button></article><article data-roadmap-id="trees-heaps-graphs"><div><h4>Trees, heaps, and graphs</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="trees-heaps-graphs">Mark overview complete</button></article><article data-roadmap-id="greedy-dp"><div><h4>Greedy algorithms and dynamic programming</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="greedy-dp">Mark overview complete</button></article></div></details>
+        <details class="roadmap-module"><summary><span>04</span> Core Computer Science</summary><div class="roadmap-topics"><article data-roadmap-id="oop"><div><h4>Object-oriented programming</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="oop">Mark overview complete</button></article><article data-roadmap-id="databases"><div><h4>Database management systems</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="databases">Mark overview complete</button></article><article data-roadmap-id="operating-systems"><div><h4>Operating systems</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="operating-systems">Mark overview complete</button></article><article data-roadmap-id="networks"><div><h4>Computer networks</h4><p>Topic overview only; dedicated questions are not currently available.</p></div><button type="button" data-roadmap-complete="networks">Mark overview complete</button></article></div></details>
+        <details class="roadmap-module"><summary><span>05</span> Interview Practice</summary><div class="roadmap-topics"><article data-roadmap-id="technical-practice"><div><h4>Technical and behavioural practice</h4><p>Use the existing role-aware practice setup and question bank.</p><button type="button" data-roadmap-practice="Technical depth">Practise available questions</button></div><button type="button" data-roadmap-complete="technical-practice">Mark complete</button></article><article data-roadmap-id="review-mistakes"><div><h4>Review mistakes and revise</h4><p>Study explanations and retry incorrect answers intentionally.</p><button type="button" data-view-link="progress">Review progress</button></div><button type="button" data-roadmap-complete="review-mistakes">Mark complete</button></article></div></details>
+      </section>
+
+      <section class="app-page" id="page-mock" hidden>
+        <div class="page-intro"><span class="eyebrow">TEXT-BASED PRACTICE</span><h3>Mock Interviews</h3><p>Choose a supported interview format. Sessions use the existing practice engine and its available question types.</p></div>
+        <div class="mock-grid">
+          <article class="mock-card"><span class="topic-icon">◌</span><h4>HR Interview</h4><p>Practise behavioural questions using the available question bank.</p><button type="button" data-mock-type="Behavioral">Configure HR practice <span>→</span></button></article>
+          <article class="mock-card"><span class="topic-icon">⌘</span><h4>Technical Interview</h4><p>Work through role-specific technical scenarios and answer reviews.</p><button type="button" data-mock-type="Technical">Configure technical practice <span>→</span></button></article>
+          <article class="mock-card"><span class="topic-icon">{ }</span><h4>Programming Fundamentals</h4><p>Use problem-solving questions currently available in the curated bank.</p><button type="button" data-mock-type="Situational" data-mock-focus="Problem solving">Configure practice <span>→</span></button></article>
+          <article class="mock-card"><span class="topic-icon">◎</span><h4>Mixed Interview</h4><p>Combine supported question categories for a varied practice round.</p><button type="button" data-mock-type="Mixed practice">Configure mixed practice <span>→</span></button></article>
+        </div>
+        <p class="inline-note">Voice, webcam, and live conversational interviews are not supported by this application.</p>
+      </section>
+
+      <section class="app-page" id="page-progress" hidden>
+        <div class="page-intro"><span class="eyebrow">BASED ON SAVED WORKBOOK DATA</span><h3>Progress Tracker</h3><p>Performance figures are calculated from stored practice sessions and answer reviews.</p></div>
+        <div class="progress-metrics"><article><span id="progress-attempted">0</span><small>ANSWERS REVIEWED</small></article><article><span id="progress-accuracy">—</span><small>ACCURACY</small></article><article><span id="progress-completed">0</span><small>COMPLETED SESSIONS</small></article></div>
+        <section class="content-section"><div class="section-heading"><div><h3>Topic performance</h3><p>Intentional retries are excluded from these topic totals.</p></div></div><div id="topic-performance"><p class="empty-state">No reviewed topic data yet.</p></div></section>
+        <section class="content-section"><div class="section-heading"><div><h3>Recent activity</h3><p>Saved practice sessions; no historical trend is inferred from insufficient data.</p></div></div><div id="progress-activity"><p class="empty-state">No practice sessions saved yet.</p></div></section>
+        <section class="content-section planner-section"><div class="section-heading"><div><span class="eyebrow">DAILY PLANNER</span><h3>Plan your next study block</h3><p>Checklist status is saved in this browser, not in the workbook.</p></div><button class="text-action" id="reset-planner" type="button">Reset today's checklist</button></div><div class="planner-list"><label><input type="checkbox" data-planner-task="practice"><span>Practise interview questions</span></label><label><input type="checkbox" data-planner-task="review"><span>Review incorrect answers</span></label><label><input type="checkbox" data-planner-task="weak-topic"><span>Study a topic that needs more practice</span></label><label><input type="checkbox" data-planner-task="mock"><span>Complete a mock interview practice</span></label></div></section>
+      </section>
+
+      <section class="app-page" id="page-experiences" hidden>
+        <div class="page-intro"><span class="eyebrow">CANDIDATE STORIES</span><h3>Interview Experiences</h3><p>Experiences are organised here only when verified submissions are available.</p></div>
+        <div class="empty-feature"><span class="empty-feature-icon">◷</span><h4>No verified interview experiences available</h4><p>This project does not currently store company, role, or interview-round stories. We will not present fictional examples as real candidate experiences.</p><button class="button button-dark" type="button" data-view-link="practice">Practise available questions <span>→</span></button></div>
+        <section class="content-section"><div class="section-heading"><div><h3>Available practice instead</h3><p>Use curated technical and behavioural questions while experience submissions are unavailable.</p></div></div><button class="resource-link" type="button" data-view-link="hub">Browse the Prep Hub <span>→</span></button></section>
+      </section>
+
+      <section class="app-page" id="page-resources" hidden>
+        <div class="page-intro"><span class="eyebrow">PRACTICAL GUIDANCE</span><h3>Community &amp; Resources</h3><p>A focused resource library for preparation. Community posting features are not currently supported.</p></div>
+        <div class="resource-grid">
+          <article class="resource-card"><span class="eyebrow">PRACTICE</span><h4>Use a clear answer structure</h4><p>Explain the situation, your reasoning, the action you took, and the result. Keep examples specific and distinguish your contribution from the team's.</p></article>
+          <article class="resource-card"><span class="eyebrow">TECHNICAL</span><h4>Make your trade-offs explicit</h4><p>Clarify requirements, compare options, call out risks, and describe how you would verify the result.</p></article>
+          <article class="resource-card"><span class="eyebrow">REFLECTION</span><h4>Review the explanation, not just the score</h4><p>Use answer explanations to identify a next learning step. Scores describe this practice session, not a guaranteed hiring outcome.</p></article>
+          <article class="resource-card"><span class="eyebrow">FAQ</span><h4>Where is my practice data stored?</h4><p>Session answers are saved in the configured local Excel workbook. Planner and roadmap checkmarks are stored in this browser only.</p></article>
+        </div>
+        <button class="resource-link" type="button" data-view-link="practice">Start a practice session <span>→</span></button>
       </section>
     </section>
   </main>

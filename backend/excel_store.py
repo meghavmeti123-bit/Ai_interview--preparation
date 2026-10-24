@@ -187,10 +187,36 @@ def get_dashboard_summary(path: Path, limit: int = 5) -> dict[str, Any]:
         practice_rows = _records(workbook["Practice"])
         review_rows = _records(workbook["Reviews"])
         reviews_by_session: dict[str, list[dict[str, Any]]] = {}
+        reviews_by_question: dict[tuple[str, str], dict[str, Any]] = {}
+        practice_by_session: dict[str, list[dict[str, Any]]] = {}
         for review in review_rows:
             reviews_by_session.setdefault(str(review["session_id"]), []).append(review)
+            reviews_by_question[(str(review["session_id"]), str(review["question_id"]))] = review
+        for practice in practice_rows:
+            if not _as_bool(practice.get("intentional_retry")):
+                practice_by_session.setdefault(str(practice["session_id"]), []).append(practice)
         attempted = len(review_rows)
         correct = sum(_as_bool(row.get("is_correct")) for row in review_rows)
+        focus_summary: dict[str, dict[str, int]] = {}
+        completed_sessions = 0
+        for session in sessions:
+            session_id = str(session["session_id"])
+            requested_count = int(session.get("question_count") or 0)
+            base_practice = practice_by_session.get(session_id, [])
+            reviewed_ids = {
+                str(row["question_id"]) for row in base_practice
+                if (session_id, str(row["question_id"])) in reviews_by_question
+            }
+            if requested_count > 0 and len(reviewed_ids) >= requested_count:
+                completed_sessions += 1
+            for practice in base_practice:
+                review = reviews_by_question.get((session_id, str(practice["question_id"])))
+                if review is None:
+                    continue
+                area = str(practice.get("focus_area") or "Other")
+                focus_summary.setdefault(area, {"correct": 0, "total": 0})
+                focus_summary[area]["total"] += 1
+                focus_summary[area]["correct"] += int(_as_bool(review.get("is_correct")))
         recent = []
         for session in sessions[:max(0, limit)]:
             session_id = str(session["session_id"])
@@ -211,6 +237,13 @@ def get_dashboard_summary(path: Path, limit: int = 5) -> dict[str, Any]:
             "question_count": len(practice_rows),
             "attempted_count": attempted,
             "accuracy": round(100 * correct / attempted) if attempted else None,
+            "completed_session_count": completed_sessions,
+            "topic_stats": [
+                {"focus_area": area, **counts}
+                for area, counts in sorted(
+                    focus_summary.items(), key=lambda item: (-item[1]["total"], item[0].casefold())
+                )
+            ],
             "recent_sessions": recent,
         }
 

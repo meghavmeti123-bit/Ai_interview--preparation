@@ -31,6 +31,25 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     def dashboard():
         return jsonify(excel_store.get_dashboard_summary(app.config["EXCEL_PATH"]))
 
+    @app.get("/api/topics")
+    def topics():
+        setup = {
+            "role": "Software engineer",
+            "experience": "Mid-level (4-7 years)",
+            "interview_type": "Mixed practice",
+            "focus_areas": [],
+        }
+        focus_areas = sorted({str(question["focus_area"]) for question in question_engine.QUESTION_BANK})
+        return jsonify(topics=[
+            {
+                "focus_area": area,
+                "available_question_count": question_engine.count_available_questions(
+                    {**setup, "focus_areas": [area]}, [],
+                ),
+            }
+            for area in focus_areas
+        ])
+
     @app.post("/api/sessions")
     def start_session():
         payload = request.get_json(silent=True) or {}

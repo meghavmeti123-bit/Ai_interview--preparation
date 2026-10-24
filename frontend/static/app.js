@@ -11,11 +11,13 @@ const state = {
   retryFocus: [],
   retryMode: false,
   previousQuestion: null,
+  stage: "setup",
 };
 const stages = ["setup", "practice", "review", "reset"];
 const $ = (selector) => document.querySelector(selector);
 
 function showStage(stage) {
+  state.stage = stage;
   for (const name of stages) {
     const panel = $(`#panel-${name}`);
     panel.hidden = name !== stage;
@@ -40,6 +42,39 @@ function showStage(stage) {
   $("#stage-back").hidden = stage === "setup";
 }
 
+const pageHeadings = {
+  dashboard: ["YOUR PREPARATION SPACE", "Dashboard"],
+  hub: ["PREPARATION LIBRARY", "Prep Hub"],
+  roadmap: ["A STRUCTURED PATH", "Learning Roadmap"],
+  mock: ["TEXT-BASED PRACTICE", "Mock Interviews"],
+  progress: ["SAVED WORKBOOK DATA", "Progress Tracker"],
+  experiences: ["CANDIDATE STORIES", "Interview Experiences"],
+  resources: ["PRACTICAL GUIDANCE", "Community & Resources"],
+};
+
+function setView(view) {
+  const workspace = $(".workspace");
+  workspace.dataset.view = view;
+  $(".sidebar").dataset.view = view;
+  for (const page of document.querySelectorAll(".app-page")) {
+    page.hidden = page.id !== `page-${view}`;
+  }
+  for (const link of document.querySelectorAll("[data-view-link]")) {
+    link.classList.toggle("active", link.dataset.viewLink === view);
+  }
+  if (view === "practice") {
+    showStage(state.stage || "setup");
+    return;
+  }
+  const heading = pageHeadings[view];
+  if (heading) {
+    $("#stage-kicker").textContent = heading[0];
+    $("#page-title").textContent = heading[1];
+    $("#stage-back").hidden = true;
+    $("#session-count").textContent = "YOUR PREPARATION SPACE";
+  }
+}
+
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
@@ -57,13 +92,18 @@ async function loadDashboard() {
     $("#dashboard-sessions").textContent = data.session_count;
     $("#dashboard-attempted").textContent = data.attempted_count;
     $("#dashboard-accuracy").textContent = data.accuracy === null ? "—" : `${data.accuracy}%`;
+    $("#progress-attempted").textContent = data.attempted_count;
+    $("#progress-accuracy").textContent = data.accuracy === null ? "—" : `${data.accuracy}%`;
+    $("#progress-completed").textContent = data.completed_session_count || 0;
+    renderTopicPerformance(data.topic_stats || []);
+    renderRecentActivity(data.recent_sessions || []);
     $("#recent-count").textContent = data.recent_sessions.length ? `${data.recent_sessions.length} RECENT` : "NO HISTORY";
     const list = $("#recent-session-list");
     list.replaceChildren();
     if (!data.recent_sessions.length) {
       const empty = document.createElement("p");
       empty.className = "dashboard-empty";
-      empty.textContent = "Your practice sessions will show up here.";
+      empty.textContent = "Your preparation journey starts here.";
       list.append(empty);
       return;
     }
@@ -79,12 +119,245 @@ async function loadDashboard() {
       item.append(role, detail);
       list.append(item);
     }
-  } catch {
+  } catch (error) {
     $("#recent-count").textContent = "UNAVAILABLE";
+    $("#dashboard-accuracy").textContent = "Unavailable";
+    $("#progress-accuracy").textContent = "Unavailable";
+    showToast(`Saved progress could not be loaded: ${error.message}`);
   }
 }
 
+function renderTopicPerformance(topics) {
+  const container = $("#topic-performance");
+  container.replaceChildren();
+  if (!topics.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No reviewed topic data yet.";
+    container.append(empty);
+    return;
+  }
+  for (const topic of topics) {
+    const row = document.createElement("div");
+    row.className = "topic-performance-row";
+    const label = document.createElement("span");
+    label.textContent = topic.focus_area;
+    const track = document.createElement("div");
+    track.className = "topic-progress-track";
+    track.setAttribute("role", "progressbar");
+    track.setAttribute("aria-label", `${topic.focus_area} accuracy`);
+    track.setAttribute("aria-valuemin", "0");
+    track.setAttribute("aria-valuemax", "100");
+    const fill = document.createElement("span");
+    const accuracy = topic.total ? Math.round(100 * topic.correct / topic.total) : 0;
+    fill.style.width = `${accuracy}%`;
+    track.setAttribute("aria-valuenow", String(accuracy));
+    track.append(fill);
+    const score = document.createElement("strong");
+    score.textContent = `${topic.correct}/${topic.total} · ${accuracy}%`;
+    row.append(label, track, score);
+    container.append(row);
+  }
+}
+
+function renderRecentActivity(sessions) {
+  const container = $("#progress-activity");
+  container.replaceChildren();
+  if (!sessions.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No practice sessions saved yet.";
+    container.append(empty);
+    return;
+  }
+  for (const session of sessions) {
+    const row = document.createElement("div");
+    row.className = "activity-row";
+    const role = document.createElement("strong");
+    role.textContent = session.role;
+    const detail = document.createElement("span");
+    detail.textContent = session.accuracy === null
+      ? `${session.attempted_count}/${session.requested_question_count} answered · In progress`
+      : `${session.attempted_count}/${session.requested_question_count} answered · ${session.accuracy}% accuracy`;
+    row.append(role, detail);
+    container.append(row);
+  }
+}
+
+async function loadTopicAvailability() {
+  const source = $("#dashboard-topics");
+  const destination = $("#hub-topics");
+  destination.replaceChildren(...[...source.children].map((card) => card.cloneNode(true)));
+  try {
+    const data = await requestJson("/api/topics");
+    const counts = new Map(data.topics.map((topic) => [topic.focus_area, topic.available_question_count]));
+    for (const label of document.querySelectorAll("[data-count-focus]")) {
+      const count = counts.get(label.dataset.countFocus);
+      label.textContent = count === undefined
+        ? "Availability not reported"
+        : count > 0 ? `${count} matching questions available` : "No matching questions yet";
+      label.classList.toggle("is-muted", count === undefined || count === 0);
+    }
+    for (const card of document.querySelectorAll(".topic-card[data-topic-focus]")) {
+      const count = counts.get(card.dataset.topicFocus);
+      if (count !== undefined && count === 0) {
+        const action = card.querySelector("[data-topic-practice]");
+        if (action) {
+          action.removeAttribute("data-topic-practice");
+          action.setAttribute("data-topic-unavailable", "");
+          action.textContent = "View topic status →";
+        }
+      }
+    }
+  } catch (error) {
+    for (const label of document.querySelectorAll("[data-count-focus]")) {
+      label.textContent = "Availability unavailable";
+      label.classList.add("is-muted");
+    }
+    showToast(`Topic availability could not be loaded: ${error.message}`);
+  }
+}
+
+const roadmapStorageKey = "interviewready-roadmap-completed";
+
+function readStoredList(key) {
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
+      throw new TypeError("Saved browser data has an unexpected format.");
+    }
+    return parsed;
+  } catch (error) {
+    showToast(`Browser-saved checklist data could not be read: ${error.message}`);
+    return [];
+  }
+}
+
+function renderRoadmapProgress() {
+  const completed = new Set(readStoredList(roadmapStorageKey));
+  const rows = document.querySelectorAll("[data-roadmap-id]");
+  for (const row of rows) {
+    const isComplete = completed.has(row.dataset.roadmapId);
+    row.classList.toggle("is-complete", isComplete);
+    const button = row.querySelector("[data-roadmap-complete]");
+    if (button) {
+      const overview = button.textContent.toLocaleLowerCase().includes("overview");
+      button.textContent = isComplete ? "Completed · undo" : overview ? "Mark overview complete" : "Mark complete";
+    }
+  }
+  $("#roadmap-completed").textContent = String(completed.size);
+  $("#roadmap-progress-fill").style.width = `${rows.length ? Math.min(100, 100 * completed.size / rows.length) : 0}%`;
+}
+
+function plannerStorageKey() {
+  const today = new Date();
+  const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return `interviewready-planner-${localDate}`;
+}
+
+function initializePlanner() {
+  const saved = new Set(readStoredList(plannerStorageKey()));
+  for (const input of document.querySelectorAll("[data-planner-task]")) {
+    input.checked = saved.has(input.dataset.plannerTask);
+    input.addEventListener("change", () => {
+      const current = new Set(readStoredList(plannerStorageKey()));
+      if (input.checked) current.add(input.dataset.plannerTask);
+      else current.delete(input.dataset.plannerTask);
+      localStorage.setItem(plannerStorageKey(), JSON.stringify([...current]));
+    });
+  }
+}
+
+function navigateToView(view) {
+  setView(view);
+  if (view === "practice") {
+    $("#setup-form").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function configurePractice({ focusAreas = [], interviewType = "Mixed practice" } = {}) {
+  if (!focusAreas.length) focusAreas = ["Communication", "Problem solving", "Technical depth"];
+  if (!$("#role").value) $("#role").value = "Software engineer";
+  if (!$("#experience").value) $("#experience").value = "Mid-level (4-7 years)";
+  $("#interview-type").value = interviewType;
+  for (const input of document.querySelectorAll('input[name="focus"]')) {
+    input.checked = focusAreas.includes(input.value);
+  }
+  navigateToView("practice");
+  refreshQuestionCapacity();
+}
+
+for (const link of document.querySelectorAll("[data-view-link]")) {
+  link.addEventListener("click", () => navigateToView(link.dataset.viewLink));
+}
+
+document.querySelector("[data-home-link]")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  setView("dashboard");
+});
+
+document.addEventListener("click", (event) => {
+  const topicButton = event.target.closest("[data-topic-practice]");
+  if (topicButton) {
+    const card = topicButton.closest("[data-topic-focus]");
+    if (card) configurePractice({ focusAreas: [card.dataset.topicFocus] });
+    return;
+  }
+  const unavailableButton = event.target.closest("[data-topic-unavailable]");
+  if (unavailableButton) {
+    const card = unavailableButton.closest("[data-topic-name]");
+    setView("hub");
+    $("#topic-search").value = card.dataset.topicName;
+    $("#topic-search").dispatchEvent(new Event("input"));
+    showToast(`No matching curated questions are available for ${card.dataset.topicName} yet.`);
+    return;
+  }
+  const mockButton = event.target.closest("[data-mock-type]");
+  if (mockButton) {
+    configurePractice({
+      interviewType: mockButton.dataset.mockType,
+      focusAreas: mockButton.dataset.mockFocus ? [mockButton.dataset.mockFocus] : [],
+    });
+    return;
+  }
+  const roadmapPractice = event.target.closest("[data-roadmap-practice]");
+  if (roadmapPractice) {
+    configurePractice({ focusAreas: [roadmapPractice.dataset.roadmapPractice] });
+    return;
+  }
+  const completeButton = event.target.closest("[data-roadmap-complete]");
+  if (completeButton) {
+    const completed = new Set(readStoredList(roadmapStorageKey));
+    const id = completeButton.dataset.roadmapComplete;
+    if (completed.has(id)) completed.delete(id);
+    else completed.add(id);
+    localStorage.setItem(roadmapStorageKey, JSON.stringify([...completed]));
+    renderRoadmapProgress();
+  }
+});
+
+$("#topic-search").addEventListener("input", () => {
+  const query = $("#topic-search").value.trim().toLocaleLowerCase();
+  let visibleCount = 0;
+  for (const card of document.querySelectorAll("#hub-topics .topic-card")) {
+    const matches = card.dataset.topicName.toLocaleLowerCase().includes(query)
+      || card.textContent.toLocaleLowerCase().includes(query);
+    card.hidden = !matches;
+    visibleCount += Number(matches);
+  }
+  $("#hub-empty").hidden = visibleCount > 0;
+});
+
+$("#reset-planner").addEventListener("click", () => {
+  localStorage.removeItem(plannerStorageKey());
+  for (const input of document.querySelectorAll("[data-planner-task]")) input.checked = false;
+  showToast("Today's planner checklist has been reset.");
+});
+
 $("#start-practice")?.addEventListener("click", () => {
+  setView("practice");
   $("#setup-form").scrollIntoView({ behavior: "smooth", block: "start" });
   $("#role").focus({ preventScroll: true });
 });
@@ -587,4 +860,8 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 3200);
 }
 
+setView("dashboard");
+renderRoadmapProgress();
+initializePlanner();
 loadDashboard();
+loadTopicAvailability();
